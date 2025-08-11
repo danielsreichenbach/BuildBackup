@@ -65,15 +65,7 @@ jobs:
 
     - name: Build and publish native binary
       run: |
-        dotnet publish \
-          --configuration Release \
-          --runtime ${{ matrix.runtime }} \
-          --self-contained true \
-          --output ./publish/${{ matrix.runtime }} \
-          -p:PublishSingleFile=true \
-          -p:PublishTrimmed=true \
-          -p:PublishReadyToRun=true \
-          -p:IncludeNativeLibrariesForSelfExtract=true
+        dotnet publish --configuration Release --runtime ${{ matrix.runtime }} --self-contained true --output ./publish/${{ matrix.runtime }} -p:PublishSingleFile=true -p:PublishTrimmed=false -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true
 
     - name: Prepare artifact
       shell: bash
