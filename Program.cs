@@ -53,15 +53,25 @@ namespace BuildBackup
             cdn.client.Timeout = new TimeSpan(0, 5, 0);
             cdn.cdnList = new List<string> {
                 "blzddist1-a.akamaihd.net",     // Akamai first
-                "level3.blizzard.com",        // Level3
-                "us.cdn.blizzard.com",        // Official US CDN
-                "eu.cdn.blizzard.com",        // Official EU CDN
+                "level3.blizzard.com",          // Level3
+                "us.cdn.blizzard.com",          // Official US CDN
+                "eu.cdn.blizzard.com",          // Official EU CDN
                 //"kr.cdn.blizzard.com",        // Official KR CDN
-                "cdn.blizzard.com",             // Official regionless CDN
-                //"blizzard.nefficient.co.kr",  // Korea 
-                "archive.wow.tools",            // wow.tools archive
-                //"tact.mirror.reliquaryhq.com",  // ReliquaryHQ archive
+                // "cdn.blizzard.com",          // Official regionless CDN
+                //"blizzard.nefficient.co.kr",  // Korea
+                // "casc.wago.tool",            // Inofficial wago.tools CDN
+                "cdn.arctium.tools",            // Arctium Launcher archive
+                "tact.mirror.reliquaryhq.com",  // ReliquaryHQ archive
             };
+
+            Console.WriteLine($"[CDN LIST] Initial CDN list ({cdn.cdnList.Count} servers):");
+            foreach (var cdnServer in cdn.cdnList)
+            {
+                Console.WriteLine($"  - {cdnServer}");
+            }
+            
+            // Initialize parallel downloads
+            cdn.InitializeParallelDownloads();
 
             // Check if cache/backup directory exists
             try
@@ -617,7 +627,7 @@ namespace BuildBackup
                     var archivedFileList = new Dictionary<string, Dictionary<string, List<string>>>();
                     var unarchivedFileList = new Dictionary<string, List<string>>();
 
-                    Console.WriteLine("Looking up in indexes..");
+                    Console.WriteLine("Looking up in indexes...\n");
                     foreach (var fileEntry in fileList)
                     {
                         if (!indexDictionary.TryGetValue(fileEntry.Key.ToUpper(), out IndexEntry entry))
@@ -1477,7 +1487,7 @@ namespace BuildBackup
             var finishedCDNConfigs = new List<string>();
             var finishedEncodings = new List<string>();
 
-            var downloadThrottler = new SemaphoreSlim(initialCount: 10);
+            var downloadThrottler = new SemaphoreSlim(initialCount: SettingsManager.maxParallelDownloads);
 
             foreach (string program in checkPrograms)
             {
@@ -1612,7 +1622,7 @@ namespace BuildBackup
                     }
                 }
 
-                Console.Write("Downloading patch files..");
+                Console.Write("Downloading patch files...\n");
                 try
                 {
                     if (!string.IsNullOrEmpty(buildConfig.patch))
@@ -1638,7 +1648,7 @@ namespace BuildBackup
 
                     if (cdnConfig.archives != null)
                     {
-                        Console.Write("Loading " + cdnConfig.archives.Count() + " indexes..");
+                        Console.Write("Loading " + cdnConfig.archives.Count() + " indexes...\n");
                         try
                         {
                             GetIndexes(cdns.entries[0].path + "/", cdnConfig.archives);
@@ -1651,7 +1661,7 @@ namespace BuildBackup
 
                         if (fullDownload)
                         {
-                            Console.Write("Fetching and saving archive sizes..");
+                            Console.Write("Fetching and saving archive sizes...\n");
 
                             for (short i = 0; i < cdnConfig.archives.Length; i++)
                             {
@@ -2218,7 +2228,9 @@ namespace BuildBackup
 
             if (!SettingsManager.useRibbit)
             {
-                using (HttpResponseMessage response = cdn.client.GetAsync(new Uri(baseUrl + program + "/" + "versions")).Result)
+                var versionsUrl = new Uri(baseUrl + program + "/" + "versions");
+                Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
+                using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
                 {
                     if (response.IsSuccessStatusCode)
                     {
@@ -2247,7 +2259,9 @@ namespace BuildBackup
                     Console.WriteLine("Error during retrieving Ribbit versions: " + e.Message + ", trying HTTP..");
                     try
                     {
-                        using (HttpResponseMessage response = cdn.client.GetAsync(new Uri(baseUrl + program + "/" + "versions")).Result)
+                        var versionsUrl = new Uri(baseUrl + program + "/" + "versions");
+                        Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
+                        using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
                         {
                             if (response.IsSuccessStatusCode)
                             {
@@ -2354,7 +2368,9 @@ namespace BuildBackup
 
             if (!SettingsManager.useRibbit)
             {
-                using (HttpResponseMessage response = cdn.client.GetAsync(new Uri(baseUrl + program + "/" + "cdns")).Result)
+                var cdnsUrl = new Uri(baseUrl + program + "/" + "cdns");
+                Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
+                using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
                 {
                     if (response.IsSuccessStatusCode)
                     {
@@ -2384,7 +2400,9 @@ namespace BuildBackup
                     Console.WriteLine("Error during retrieving Ribbit cdns: " + e.Message + ", trying HTTP..");
                     try
                     {
-                        using (HttpResponseMessage response = cdn.client.GetAsync(new Uri(baseUrl + program + "/" + "cdns")).Result)
+                        var cdnsUrl = new Uri(baseUrl + program + "/" + "cdns");
+                        Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
+                        using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
                         {
                             if (response.IsSuccessStatusCode)
                             {
@@ -2468,9 +2486,16 @@ namespace BuildBackup
                     {
                         if (!cdn.cdnList.Contains(cdnHost))
                         {
+                            Console.WriteLine($"[CDN LIST] Adding new CDN from response: {cdnHost}");
                             cdn.cdnList.Add(cdnHost);
                         }
                     }
+                }
+
+                Console.WriteLine($"[CDN LIST] Final CDN list ({cdn.cdnList.Count} servers):");
+                foreach (var cdnServer in cdn.cdnList)
+                {
+                    Console.WriteLine($"  - {cdnServer}");
                 }
             }
 
@@ -3362,19 +3387,26 @@ namespace BuildBackup
 
             return patchFile;
         }
-        private static void UpdateListfile()
+        private static async void UpdateListfile()
         {
             if (!File.Exists("listfile.txt") || DateTime.Now.AddHours(-1) > File.GetLastWriteTime("listfile.txt"))
             {
-                using (var client = new System.Net.WebClient())
-                using (var stream = new MemoryStream())
+                using (var client = new HttpClient())
                 {
-                    client.Headers[System.Net.HttpRequestHeader.AcceptEncoding] = "gzip";
-                    client.Headers[System.Net.HttpRequestHeader.UserAgent] = "BuildBackup";
-                    using (var responseStream = new System.IO.Compression.GZipStream(client.OpenRead("https://github.com/wowdev/wow-listfile/raw/master/listfile.txt"), System.IO.Compression.CompressionMode.Decompress))
+                    client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip");
+                    client.DefaultRequestHeaders.Add("User-Agent", "BuildBackup");
+
+                    var listfileUrl = "https://github.com/wowdev/wow-listfile/raw/master/listfile.txt";
+                    Console.WriteLine($"[HTTP GET] {listfileUrl}");
+                    var response = await client.GetAsync(listfileUrl);
+                    response.EnsureSuccessStatusCode();
+
+                    using (var stream = await response.Content.ReadAsStreamAsync())
+                    using (var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress))
+                    using (var memoryStream = new MemoryStream())
                     {
-                        responseStream.CopyTo(stream);
-                        File.WriteAllBytes("listfile.txt", stream.ToArray());
+                        await gzipStream.CopyToAsync(memoryStream);
+                        await File.WriteAllBytesAsync("listfile.txt", memoryStream.ToArray());
                     }
                 }
             }

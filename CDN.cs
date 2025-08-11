@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BuildBackup
@@ -11,6 +12,16 @@ namespace BuildBackup
         public HttpClient client;
         public string cacheDir;
         public List<string> cdnList;
+        private static SemaphoreSlim downloadSemaphore;
+        
+        public void InitializeParallelDownloads()
+        {
+            if (downloadSemaphore == null)
+            {
+                downloadSemaphore = new SemaphoreSlim(SettingsManager.maxParallelDownloads, SettingsManager.maxParallelDownloads);
+                Console.WriteLine($"[PARALLEL] Initialized with {SettingsManager.maxParallelDownloads} concurrent downloads");
+            }
+        }
 
         public async Task<uint> GetRemoteFileSize(string path)
         {
@@ -26,6 +37,7 @@ namespace BuildBackup
 
                 try
                 {
+                    Console.WriteLine($"[HTTP HEAD - SIZE CHECK] {uri.AbsoluteUri}");
                     using (var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead))
                     {
                         if (response.IsSuccessStatusCode)
@@ -33,7 +45,16 @@ namespace BuildBackup
                             found = true;
 
                             if (response.Content.Headers.ContentLength != null)
-                                return (uint)response.Content.Headers.ContentLength;
+                            {
+                                var size = (uint)response.Content.Headers.ContentLength;
+                                Console.WriteLine($"[HTTP HEAD - FOUND] Size: {size} bytes from {cdn}");
+                                return size;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[HTTP HEAD - FOUND] No content length header from {cdn}");
+                                return 0;
+                            }
                         }
                         else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
@@ -52,6 +73,7 @@ namespace BuildBackup
             }
             if (!found)
             {
+                Console.WriteLine($"[HTTP HEAD - NOT FOUND] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
                 Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve filesize!", true);
             }
 
@@ -75,9 +97,22 @@ namespace BuildBackup
                 }
             }
 
+            var usingCache = !redownload && File.Exists(Path.Combine(cacheDir, path));
+            if (usingCache)
+            {
+                var cachedUrl = "http://" + (cdnList.Count > 0 ? cdnList[0] : "unknown") + "/" + path;
+                Console.WriteLine($"[HTTP GET - CACHED] {cachedUrl}");
+            }
+
             if (redownload || !File.Exists(Path.Combine(cacheDir, path)))
             {
-                var found = false;
+                // Wait for available download slot
+                await downloadSemaphore.WaitAsync();
+                Console.WriteLine($"[PARALLEL] Acquired download slot for {path}");
+                
+                try
+                {
+                    var found = false;
 
                 foreach (var cdn in cdnList)
                 {
@@ -96,20 +131,64 @@ namespace BuildBackup
                             Directory.CreateDirectory(Path.GetDirectoryName(cacheDir + cleanName));
                         }
 
-                        using (var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead))
+                        // Check if partial file exists for resume
+                        var fullPath = cacheDir + cleanName;
+                        var existingSize = 0L;
+                        var canResume = false;
+
+                        if (File.Exists(fullPath))
+                        {
+                            existingSize = new FileInfo(fullPath).Length;
+                            if (existingSize > 0)
+                            {
+                                canResume = true;
+                                Console.WriteLine($"[HTTP GET - RESUMING] Found partial file ({existingSize} bytes): {uri.AbsoluteUri}");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[HTTP GET - DOWNLOADING] {uri.AbsoluteUri}");
+                        }
+
+                        // Prepare HTTP request with Range header if resuming
+                        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                        if (canResume)
+                        {
+                            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingSize, null);
+                        }
+
+                        using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
                         using (var responseStream = await response.Content.ReadAsStreamAsync())
                         {
-                            if (response.IsSuccessStatusCode)
+                            if (response.IsSuccessStatusCode || (canResume && response.StatusCode == System.Net.HttpStatusCode.PartialContent))
                             {
-                                using (var file = File.Create(cacheDir + cleanName))
+                                // Use append mode if resuming, create new if starting fresh
+                                using (var file = canResume ? File.OpenWrite(fullPath) : File.Create(fullPath))
                                 {
                                     found = true;
 
+                                    // Seek to end if resuming
+                                    if (canResume)
+                                    {
+                                        file.Seek(0, SeekOrigin.End);
+                                    }
+
                                     var buffer = new byte[4096];
                                     int read;
+                                    long totalBytes = 0;
                                     while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
                                     {
                                         file.Write(buffer, 0, read);
+                                        totalBytes += read;
+                                    }
+
+                                    if (canResume)
+                                    {
+                                        Console.WriteLine($"[HTTP GET - RESUMED] Downloaded {totalBytes} additional bytes (total: {existingSize + totalBytes}) from {cdn}");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"[HTTP GET - SUCCESS] Downloaded {totalBytes} bytes from {cdn}");
                                     }
                                 }
                             }
@@ -137,14 +216,22 @@ namespace BuildBackup
                     }
                 }
 
-                if (!found)
-                {
-                    Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve it!", true);
+                    if (!found)
+                    {
+                        Console.WriteLine($"[HTTP GET - FAILED] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
+                        Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve it!", true);
+                    }
+                    else
+                    {
+                        if (verbose)
+                            Console.WriteLine("Downloaded " + path);
+                    }
                 }
-                else
+                finally
                 {
-                    if (verbose)
-                        Console.WriteLine("Downloaded " + path);
+                    // Release download slot
+                    downloadSemaphore.Release();
+                    Console.WriteLine($"[PARALLEL] Released download slot for {path}");
                 }
             }
 
