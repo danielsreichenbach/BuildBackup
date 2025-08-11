@@ -69,7 +69,7 @@ namespace BuildBackup
             {
                 Console.WriteLine($"  - {cdnServer}");
             }
-            
+
             // Initialize parallel downloads
             cdn.InitializeParallelDownloads();
 
@@ -1663,22 +1663,40 @@ namespace BuildBackup
                         {
                             Console.Write("Fetching and saving archive sizes...\n");
 
-                            for (short i = 0; i < cdnConfig.archives.Length; i++)
+                            // Get list of archives that need size checking
+                            var archivesToCheck = cdnConfig.archives.Where(archive => !archiveSizes.ContainsKey(archive)).ToArray();
+                            Console.WriteLine($"[SIZE CHECK] Checking {archivesToCheck.Length} archive sizes in parallel");
+
+                            // Create parallel tasks for size checking
+                            var sizeTasks = archivesToCheck.Select(async archive =>
                             {
-                                var archive = cdnConfig.archives[i];
-                                if (!archiveSizes.ContainsKey(archive))
+                                try
                                 {
+                                    await downloadThrottler.WaitAsync();
                                     try
                                     {
                                         var remoteFileSize = await cdn.GetRemoteFileSize(cdns.entries[0].path + "/data/" + archive[0] + archive[1] + "/" + archive[2] + archive[3] + "/" + archive);
-                                        archiveSizes.Add(archive, remoteFileSize);
+                                        return new { Archive = archive, Size = remoteFileSize, Success = true };
                                     }
-                                    catch (Exception e)
+                                    finally
                                     {
-                                        Console.WriteLine("Failed to get remote file size for " + archive + ": " + e.Message);
-                                        archiveSizes.Add(archive, 0);
+                                        downloadThrottler.Release();
                                     }
                                 }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine("Failed to get remote file size for " + archive + ": " + e.Message);
+                                    return new { Archive = archive, Size = 0u, Success = false };
+                                }
+                            });
+
+                            // Wait for all size checks to complete
+                            var sizeResults = await Task.WhenAll(sizeTasks);
+
+                            // Add results to dictionary
+                            foreach (var result in sizeResults)
+                            {
+                                archiveSizes.Add(result.Archive, result.Size);
                             }
 
                             var archiveSizesLines = new List<string>();
@@ -2789,6 +2807,7 @@ namespace BuildBackup
 
         private static void GetIndexes(string url, string[] archives)
         {
+            Console.WriteLine($"[INDEX] Starting parallel download of {archives.Length} archive indexes from {url}");
             Parallel.ForEach(archives, (archive, state, i) =>
             {
                 try

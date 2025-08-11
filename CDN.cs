@@ -13,13 +13,22 @@ namespace BuildBackup
         public string cacheDir;
         public List<string> cdnList;
         private static SemaphoreSlim downloadSemaphore;
-        
+
         public void InitializeParallelDownloads()
         {
             if (downloadSemaphore == null)
             {
                 downloadSemaphore = new SemaphoreSlim(SettingsManager.maxParallelDownloads, SettingsManager.maxParallelDownloads);
                 Console.WriteLine($"[PARALLEL] Initialized with {SettingsManager.maxParallelDownloads} concurrent downloads");
+            }
+        }
+
+        private void EnsureSemaphoreInitialized()
+        {
+            if (downloadSemaphore == null)
+            {
+                Console.WriteLine($"[PARALLEL] WARNING: Semaphore was null, initializing on demand");
+                downloadSemaphore = new SemaphoreSlim(SettingsManager.maxParallelDownloads, SettingsManager.maxParallelDownloads);
             }
         }
 
@@ -85,6 +94,9 @@ namespace BuildBackup
             path = path.ToLower();
             var localPath = Path.Combine(cacheDir, path);
 
+            // Debug: Log all file requests
+            Console.WriteLine($"[CDN GET] Requesting: {path}");
+
             if (File.Exists(localPath) && expectedSize != 0)
             {
                 var fileInfo = new FileInfo(localPath);
@@ -106,10 +118,13 @@ namespace BuildBackup
 
             if (redownload || !File.Exists(Path.Combine(cacheDir, path)))
             {
+                // Ensure semaphore is initialized
+                EnsureSemaphoreInitialized();
+
                 // Wait for available download slot
                 await downloadSemaphore.WaitAsync();
                 Console.WriteLine($"[PARALLEL] Acquired download slot for {path}");
-                
+
                 try
                 {
                     var found = false;

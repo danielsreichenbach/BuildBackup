@@ -25,7 +25,7 @@ namespace BuildBackup
             useRibbit = config.GetSection("config").GetSection("useRibbit").Get<bool>();
             downloadPatchFiles = config.GetSection("config").GetSection("downloadPatchFiles").Get<bool>();
             maxParallelDownloads = config.GetSection("config").GetSection("maxParallelDownloads").Get<int>();
-            
+
             // Default to 4 parallel downloads if not specified or invalid
             if (maxParallelDownloads <= 0)
                 maxParallelDownloads = 4;
