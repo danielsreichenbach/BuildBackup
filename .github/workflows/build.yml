@@ -1,0 +1,161 @@
+name: Build Native Binaries
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          # Windows builds
+          - os: windows
+            arch: x64
+            runner: windows-latest
+            runtime: win-x64
+            extension: .exe
+          - os: windows
+            arch: arm64
+            runner: windows-latest
+            runtime: win-arm64
+            extension: .exe
+          
+          # Linux builds
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+            runtime: linux-x64
+            extension: ""
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+            runtime: linux-arm64
+            extension: ""
+          
+          # macOS builds
+          - os: macos
+            arch: x64
+            runner: macos-latest
+            runtime: osx-x64
+            extension: ""
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            runtime: osx-arm64
+            extension: ""
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build and publish native binary
+      run: |
+        dotnet publish \
+          --configuration Release \
+          --runtime ${{ matrix.runtime }} \
+          --self-contained true \
+          --output ./publish/${{ matrix.runtime }} \
+          -p:PublishSingleFile=true \
+          -p:PublishTrimmed=true \
+          -p:PublishReadyToRun=true \
+          -p:IncludeNativeLibrariesForSelfExtract=true
+
+    - name: Prepare artifact
+      shell: bash
+      run: |
+        mkdir -p ./artifacts
+        cd ./publish/${{ matrix.runtime }}
+        
+        # Find the main executable
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          EXECUTABLE=$(find . -name "BuildBackup.exe" -type f)
+        else
+          EXECUTABLE=$(find . -name "BuildBackup" -type f)
+        fi
+        
+        if [ -z "$EXECUTABLE" ]; then
+          echo "Error: Could not find BuildBackup executable"
+          ls -la
+          exit 1
+        fi
+        
+        # Create archive name
+        ARCHIVE_NAME="BuildBackup-${{ matrix.os }}-${{ matrix.arch }}"
+        
+        # Create archive based on OS
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          # For Windows, create a zip file
+          7z a "../../artifacts/${ARCHIVE_NAME}.zip" ./*
+        else
+          # For Unix-like systems, create a tar.gz file
+          tar -czf "../../artifacts/${ARCHIVE_NAME}.tar.gz" ./*
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuildBackup-${{ matrix.os }}-${{ matrix.arch }}
+        path: ./artifacts/*
+        retention-days: 90
+        compression-level: 6
+
+  create-release-artifacts:
+    name: Create Release Artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Display structure
+      run: find ./artifacts -type f -name "*.zip" -o -name "*.tar.gz" | sort
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/**/*.zip
+          ./artifacts/**/*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-info:
+    name: Build Information
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Build Summary
+      run: |
+        echo "## Build Artifacts Created" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Native binaries have been built for the following platforms:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Platform | Architecture | Runtime ID | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------------|------------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Windows  | x64         | win-x64    | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "| Windows  | ARM64       | win-arm64  | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "| Linux    | x64         | linux-x64  | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "| Linux    | ARM64       | linux-arm64| ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "| macOS    | x64         | osx-x64    | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "| macOS    | ARM64       | osx-arm64  | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Artifacts are retained for 90 days and can be downloaded from the Actions tab." >> $GITHUB_STEP_SUMMARY
+        echo "If this is a release, binaries will also be attached to the release." >> $GITHUB_STEP_SUMMARY
