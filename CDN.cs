@@ -23,6 +23,21 @@ namespace BuildBackup
             }
         }
 
+        private static string FormatFileSize(uint bytes)
+        {
+            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+            double size = bytes;
+            int suffixIndex = 0;
+
+            while (size >= 1024 && suffixIndex < suffixes.Length - 1)
+            {
+                size /= 1024;
+                suffixIndex++;
+            }
+
+            return $"{size:0.##} {suffixes[suffixIndex]}";
+        }
+
         private void EnsureSemaphoreInitialized()
         {
             if (downloadSemaphore == null)
@@ -58,7 +73,8 @@ namespace BuildBackup
                             if (response.Content.Headers.ContentLength != null)
                             {
                                 var size = (uint)response.Content.Headers.ContentLength;
-                                Console.WriteLine($"[SIZE] {path}: {size:N0} bytes");
+                                var humanSize = FormatFileSize(size);
+                                Console.WriteLine($"[SIZE] {path}: {humanSize}");
                                 return size;
                             }
                             else
