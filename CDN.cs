@@ -46,7 +46,7 @@ namespace BuildBackup
 
                 try
                 {
-                    Console.WriteLine($"[HTTP HEAD - SIZE CHECK] {uri.AbsoluteUri}");
+                    Console.WriteLine($"[HTTP GET - SIZE CHECK] {uri.AbsoluteUri}");
                     using (var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead))
                     {
                         if (response.IsSuccessStatusCode)
@@ -56,12 +56,12 @@ namespace BuildBackup
                             if (response.Content.Headers.ContentLength != null)
                             {
                                 var size = (uint)response.Content.Headers.ContentLength;
-                                Console.WriteLine($"[HTTP HEAD - FOUND] Size: {size} bytes from {cdn}");
+                                Console.WriteLine($"[HTTP GET - SIZE FOUND] {size} bytes from {cdn}");
                                 return size;
                             }
                             else
                             {
-                                Console.WriteLine($"[HTTP HEAD - FOUND] No content length header from {cdn}");
+                                Console.WriteLine($"[HTTP GET - SIZE FOUND] No content length header from {cdn}");
                                 return 0;
                             }
                         }
@@ -82,7 +82,7 @@ namespace BuildBackup
             }
             if (!found)
             {
-                Console.WriteLine($"[HTTP HEAD - NOT FOUND] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
+                Console.WriteLine($"[HTTP GET - SIZE NOT FOUND] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
                 Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve filesize!", true);
             }
 
