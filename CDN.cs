@@ -113,7 +113,7 @@ namespace BuildBackup
             if (usingCache)
             {
                 var cachedUrl = "http://" + (cdnList.Count > 0 ? cdnList[0] : "unknown") + "/" + path;
-                Console.WriteLine($"[HTTP GET - CACHED] {cachedUrl}");
+                Console.WriteLine($"[HTTP GET - CACHED] {cachedUrl} (skipping download)");
             }
 
             if (redownload || !File.Exists(Path.Combine(cacheDir, path)))
