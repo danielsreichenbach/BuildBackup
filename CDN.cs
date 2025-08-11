@@ -58,8 +58,7 @@ namespace BuildBackup
                             if (response.Content.Headers.ContentLength != null)
                             {
                                 var size = (uint)response.Content.Headers.ContentLength;
-                                var fileName = Path.GetFileName(path);
-                                Console.WriteLine($"[SIZE] {fileName}: {size:N0} bytes");
+                                Console.WriteLine($"[SIZE] {path}: {size:N0} bytes");
                                 return size;
                             }
                             else
@@ -86,9 +85,8 @@ namespace BuildBackup
             }
             if (!found)
             {
-                var fileName = Path.GetFileName(path);
                 if (verbose)
-                    Console.WriteLine($"[SIZE NOT FOUND] {fileName} - not found on any CDN");
+                    Console.WriteLine($"[SIZE NOT FOUND] {path} - not found on any CDN");
                 Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve filesize!", true);
             }
 
