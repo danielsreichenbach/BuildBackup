@@ -1667,6 +1667,10 @@ namespace BuildBackup
                             var archivesToCheck = cdnConfig.archives.Where(archive => !archiveSizes.ContainsKey(archive)).ToArray();
                             Console.WriteLine($"[SIZE CHECK] Checking {archivesToCheck.Length} archive sizes in parallel");
 
+                            // Create a lock for thread-safe file writing
+                            var sizesLock = new object();
+                            var savedCount = 0;
+                            
                             // Create parallel tasks for size checking
                             var sizeTasks = archivesToCheck.Select(async archive =>
                             {
@@ -1676,6 +1680,27 @@ namespace BuildBackup
                                     try
                                     {
                                         var remoteFileSize = await cdn.GetRemoteFileSize(cdns.entries[0].path + "/data/" + archive[0] + archive[1] + "/" + archive[2] + archive[3] + "/" + archive);
+                                        
+                                        // Save immediately after successful retrieval
+                                        lock (sizesLock)
+                                        {
+                                            archiveSizes[archive] = remoteFileSize;
+                                            savedCount++;
+                                            
+                                            // Write the updated sizes to file
+                                            var archiveSizesLines = new List<string>();
+                                            foreach (var archiveSize in archiveSizes)
+                                            {
+                                                archiveSizesLines.Add(archiveSize.Key + " " + archiveSize.Value);
+                                            }
+                                            File.WriteAllLines("archiveSizes.txt", archiveSizesLines);
+                                            
+                                            if (savedCount % 10 == 0)
+                                            {
+                                                Console.WriteLine($"[SIZE CHECK] Progress: {savedCount}/{archivesToCheck.Length} sizes saved");
+                                            }
+                                        }
+                                        
                                         return new { Archive = archive, Size = remoteFileSize, Success = true };
                                     }
                                     finally
@@ -1693,21 +1718,7 @@ namespace BuildBackup
                             // Wait for all size checks to complete
                             var sizeResults = await Task.WhenAll(sizeTasks);
 
-                            // Add results to dictionary
-                            foreach (var result in sizeResults)
-                            {
-                                archiveSizes.Add(result.Archive, result.Size);
-                            }
-
-                            var archiveSizesLines = new List<string>();
-                            foreach (var archiveSize in archiveSizes)
-                            {
-                                archiveSizesLines.Add(archiveSize.Key + " " + archiveSize.Value);
-                            }
-
-                            await File.WriteAllLinesAsync("archiveSizes.txt", archiveSizesLines);
-
-                            Console.WriteLine("..done");
+                            Console.WriteLine($"[SIZE CHECK] Completed: {savedCount} new sizes saved");
 
                             Console.Write("Downloading " + cdnConfig.archives.Count() + " archives..");
 
