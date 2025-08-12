@@ -1,7 +1,7 @@
 ﻿{
   "config": {
     "cacheDir": "cdn/",
-    "checkProducts": [ "agent", "bna", "wow_classic", "wow_classic_era" ],
+    "checkProducts": [ "wow_classic", "wow_classic_era" ],
     "backupProducts": [ "wow_classic_era" ],
     "useRibbit": false,
     "downloadPatchFiles": true,

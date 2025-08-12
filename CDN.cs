@@ -104,6 +104,7 @@ namespace BuildBackup
                 if (verbose)
                     Console.WriteLine($"[SIZE NOT FOUND] {path} - not found on any CDN");
                 Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve filesize!", true);
+                throw new FileNotFoundException($"File {path} could not be found on any CDN host for size check. This indicates the backup is incomplete.");
             }
 
             return 0;
@@ -114,8 +115,11 @@ namespace BuildBackup
             path = path.ToLower();
             var localPath = Path.Combine(cacheDir, path);
 
-            // Debug: Log all file requests
-            Console.WriteLine($"[CDN GET] Requesting: {path}");
+            // Debug: Log all file requests with full URL for better visibility
+            var displayUrl = cdnList != null && cdnList.Count > 0 
+                ? $"http://{cdnList[0]}/{path}" 
+                : path;
+            Console.WriteLine($"[CDN GET] Requesting: {displayUrl}");
 
             if (File.Exists(localPath) && expectedSize != 0)
             {
@@ -161,9 +165,10 @@ namespace BuildBackup
 
                     try
                     {
-                        if (!Directory.Exists(cacheDir + cleanName))
+                        var directoryPath = Path.GetDirectoryName(cacheDir + cleanName);
+                        if (!Directory.Exists(directoryPath))
                         {
-                            Directory.CreateDirectory(Path.GetDirectoryName(cacheDir + cleanName));
+                            Directory.CreateDirectory(directoryPath);
                         }
 
                         // Check if partial file exists for resume
@@ -255,6 +260,7 @@ namespace BuildBackup
                     {
                         Console.WriteLine($"[HTTP GET - FAILED] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
                         Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve it!", true);
+                        throw new FileNotFoundException($"File {path} could not be found on any CDN host. This indicates the backup is incomplete.");
                     }
                     else
                     {
