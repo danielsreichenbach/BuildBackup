@@ -114,7 +114,7 @@ namespace System.IO
 
     public static class CStringExtensions
     {
-        /// <summary> Reads the NULL terminated string from 
+        /// <summary> Reads the NULL terminated string from
         /// the current stream and advances the current position of the stream by string length + 1.
         /// <seealso cref="BinaryReader.ReadString"/>
         /// </summary>
@@ -123,7 +123,7 @@ namespace System.IO
             return reader.ReadCString(Encoding.UTF8);
         }
 
-        /// <summary> Reads the NULL terminated string from 
+        /// <summary> Reads the NULL terminated string from
         /// the current stream and advances the current position of the stream by string length + 1.
         /// <seealso cref="BinaryReader.ReadString"/>
         /// </summary>
