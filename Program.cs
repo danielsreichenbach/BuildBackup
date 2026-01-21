@@ -13,7 +13,7 @@ namespace BuildBackup
 {
     class Program
     {
-        private static readonly Uri baseUrl = new Uri("http://us.patch.battle.net:1119/");
+        private static readonly Uri baseUrl = new Uri("https://us.version.battle.net/");
 
         private static string CombinePath(string basePath, string relativePath)
         {
@@ -2304,7 +2304,7 @@ namespace BuildBackup
 
             if (!SettingsManager.useRibbit)
             {
-                var versionsUrl = new Uri(baseUrl + program + "/" + "versions");
+                var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
                 Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
                 using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
                 {
@@ -2335,7 +2335,7 @@ namespace BuildBackup
                     Console.WriteLine("Error during retrieving Ribbit versions: " + e.Message + ", trying HTTP..");
                     try
                     {
-                        var versionsUrl = new Uri(baseUrl + program + "/" + "versions");
+                        var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
                         Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
                         using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
                         {
@@ -2444,7 +2444,7 @@ namespace BuildBackup
 
             if (!SettingsManager.useRibbit)
             {
-                var cdnsUrl = new Uri(baseUrl + program + "/" + "cdns");
+                var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
                 Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
                 using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
                 {
@@ -2476,7 +2476,7 @@ namespace BuildBackup
                     Console.WriteLine("Error during retrieving Ribbit cdns: " + e.Message + ", trying HTTP..");
                     try
                     {
-                        var cdnsUrl = new Uri(baseUrl + program + "/" + "cdns");
+                        var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
                         Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
                         using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
                         {
