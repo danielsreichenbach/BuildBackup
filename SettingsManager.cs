@@ -7,7 +7,6 @@ namespace BuildBackup
         public static string cacheDir;
         public static string[] checkProducts;
         public static string[] backupProducts;
-        public static bool useRibbit;
         public static bool downloadPatchFiles;
         public static int maxParallelDownloads;
 
@@ -22,7 +21,6 @@ namespace BuildBackup
             cacheDir = config.GetSection("config").GetSection("cacheDir").Get<string>();
             checkProducts = config.GetSection("config").GetSection("checkProducts").Get<string[]>();
             backupProducts = config.GetSection("config").GetSection("backupProducts").Get<string[]>();
-            useRibbit = config.GetSection("config").GetSection("useRibbit").Get<bool>();
             downloadPatchFiles = config.GetSection("config").GetSection("downloadPatchFiles").Get<bool>();
             maxParallelDownloads = config.GetSection("config").GetSection("maxParallelDownloads").Get<int>();
 

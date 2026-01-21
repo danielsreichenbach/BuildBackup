@@ -3,7 +3,6 @@
     "cacheDir": "cdn/",
     "checkProducts": [ "wow_classic", "wow_classic_era" ],
     "backupProducts": [ "wow_classic_era" ],
-    "useRibbit": false,
     "downloadPatchFiles": true,
     "maxParallelDownloads": 4
   }

@@ -4,11 +4,13 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 
 namespace BuildBackup
 {
     public static class BLTE
     {
+        private static readonly Lock keyLoad = new();
         public static byte[] Parse(byte[] content)
         {
             using (var bin = new BinaryReader(new MemoryStream(content)))
@@ -196,22 +198,24 @@ namespace BuildBackup
 
         public static byte[] DecryptFile(string name, byte[] data, string decryptionKeyName)
         {
-            byte[] key;
-
-            if (!Program.cachedArmadilloKeys.TryGetValue(decryptionKeyName, out key))
+            if (!Program.cachedArmadilloKeys.TryGetValue(decryptionKeyName, out byte[] key))
             {
-                if (!File.Exists(decryptionKeyName + ".ak"))
+                lock (keyLoad)
                 {
-                    key = new byte[16];
-                }
-                else
-                {
-                    using (BinaryReader reader = new BinaryReader(new FileStream(decryptionKeyName + ".ak", FileMode.Open)))
+                    if (!File.Exists(decryptionKeyName + ".ak"))
                     {
-                        key = reader.ReadBytes(16);
+                        key = new byte[16];
+                        throw new Exception($"Armadillo key file not found: {decryptionKeyName}.ak");
                     }
+                    else
+                    {
+                        using (BinaryReader reader = new(new FileStream(decryptionKeyName + ".ak", FileMode.Open)))
+                        {
+                            key = reader.ReadBytes(16);
+                        }
 
-                    Program.cachedArmadilloKeys.Add(decryptionKeyName, key);
+                        Program.cachedArmadilloKeys.TryAdd(decryptionKeyName, key);
+                    }
                 }
             }
 
@@ -220,7 +224,7 @@ namespace BuildBackup
             Array.Copy(IV, 8, IV, 0, 8);
             Array.Resize(ref IV, 8);
 
-            using (Salsa20 salsa = new Salsa20())
+            using (Salsa20 salsa = new())
             {
                 var decryptor = salsa.CreateDecryptor(key, IV);
                 return decryptor.TransformFinalBlock(data, 0, data.Length);

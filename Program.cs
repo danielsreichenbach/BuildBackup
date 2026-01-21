@@ -1561,11 +1561,11 @@ namespace BuildBackup
                     }
                 }
 
-                var decryptionKeyName = "";
+                cdn.decryptionKeyName = "";
 
                 if (productConfig.decryptionKeyName != null && productConfig.decryptionKeyName != string.Empty)
                 {
-                    decryptionKeyName = productConfig.decryptionKeyName;
+                    cdn.decryptionKeyName = productConfig.decryptionKeyName;
                 }
 
                 if (overrideVersions && !string.IsNullOrEmpty(overrideBuildconfig))
@@ -1622,9 +1622,9 @@ namespace BuildBackup
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(decryptionKeyName) && cdnConfig.archives == null) // Let us ignore this whole encryption thing if archives are set, surely this will never break anything and it'll back it up perfectly fine.
+                if (!string.IsNullOrEmpty(cdn.decryptionKeyName) && cdnConfig.archives == null) // Let us ignore this whole encryption thing if archives are set, surely this will never break anything and it'll back it up perfectly fine.
                 {
-                    if (!File.Exists(decryptionKeyName + ".ak"))
+                    if (!File.Exists(cdn.decryptionKeyName + ".ak"))
                     {
                         Console.WriteLine("Decryption key is set and not available on disk, skipping.");
                         continue;
@@ -2302,62 +2302,20 @@ namespace BuildBackup
             string content;
             var versions = new VersionsFile();
 
-            if (!SettingsManager.useRibbit)
+            var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
+            Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
+            using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
             {
-                var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
-                Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
-                using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
+                if (response.IsSuccessStatusCode)
                 {
-                    if (response.IsSuccessStatusCode)
+                    using (HttpContent res = response.Content)
                     {
-                        using (HttpContent res = response.Content)
-                        {
-                            content = res.ReadAsStringAsync().Result;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Error during retrieving HTTP versions: Received bad HTTP code " + response.StatusCode);
-                        return versions;
+                        content = res.ReadAsStringAsync().Result;
                     }
                 }
-            }
-            else
-            {
-                try
+                else
                 {
-                    var client = new Ribbit.Protocol.Client(Ribbit.Constants.Region.EU);
-                    var request = client.Request("v1/products/" + program + "/versions");
-                    content = request.ToString();
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Error during retrieving Ribbit versions: " + e.Message + ", trying HTTP..");
-                    try
-                    {
-                        var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
-                        Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
-                        using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
-                        {
-                            if (response.IsSuccessStatusCode)
-                            {
-                                using (HttpContent res = response.Content)
-                                {
-                                    content = res.ReadAsStringAsync().Result;
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("Error during retrieving HTTP versions: Received bad HTTP code " + response.StatusCode);
-                                return versions;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("Error retrieving versions: " + ex.Message);
-                        return versions;
-                    }
+                    Console.WriteLine("Error during retrieving HTTP versions: Received bad HTTP code " + response.StatusCode);
                     return versions;
                 }
             }
@@ -2442,63 +2400,21 @@ namespace BuildBackup
                 return cdns;
             }
 
-            if (!SettingsManager.useRibbit)
+            var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
+            Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
+            using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
             {
-                var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
-                Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
-                using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
+                if (response.IsSuccessStatusCode)
                 {
-                    if (response.IsSuccessStatusCode)
+                    using (HttpContent res = response.Content)
                     {
-                        using (HttpContent res = response.Content)
-                        {
-                            content = res.ReadAsStringAsync().Result;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Error during retrieving HTTP cdns: Received bad HTTP code " + response.StatusCode);
-                        return cdns;
+                        content = res.ReadAsStringAsync().Result;
                     }
                 }
-            }
-            else
-            {
-
-                try
+                else
                 {
-                    var client = new Ribbit.Protocol.Client(Ribbit.Constants.Region.US);
-                    var request = client.Request("v1/products/" + program + "/cdns");
-                    content = request.ToString();
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Error during retrieving Ribbit cdns: " + e.Message + ", trying HTTP..");
-                    try
-                    {
-                        var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
-                        Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
-                        using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
-                        {
-                            if (response.IsSuccessStatusCode)
-                            {
-                                using (HttpContent res = response.Content)
-                                {
-                                    content = res.ReadAsStringAsync().Result;
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("Error during retrieving HTTP cdns: Received bad HTTP code " + response.StatusCode);
-                                return cdns;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("Error retrieving CDNs file: " + ex.Message);
-                        return cdns;
-                    }
+                    Console.WriteLine("Error during retrieving HTTP cdns: Received bad HTTP code " + response.StatusCode);
+                    return cdns;
                 }
             }
 
