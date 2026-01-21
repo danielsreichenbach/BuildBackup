@@ -14,7 +14,7 @@ by development period.
 - Human-readable file size formatting in CDN operations
 - Editor configuration (.editorconfig) for consistent formatting
 - Git attributes (.gitattributes) for line ending normalization
-- Markdown linting configuration (.markdownlint.jsonc)
+- Markdown linting configuration (.markdownlint.jsonc) with GitHub Flavored Markdown
 - Thread-safe locking for Armadillo key loading
 - Generic decryptionKeyName field on CDN class
 
