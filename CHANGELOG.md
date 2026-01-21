@@ -15,6 +15,8 @@ by development period.
 - Editor configuration (.editorconfig) for consistent formatting
 - Git attributes (.gitattributes) for line ending normalization
 - Markdown linting configuration (.markdownlint.jsonc)
+- Thread-safe locking for Armadillo key loading
+- Generic decryptionKeyName field on CDN class
 
 ### Changed
 
@@ -23,6 +25,9 @@ by development period.
 - CDN list now uses community mirrors as primary sources
 - Comprehensive .gitignore with patterns for IDEs, builds, and generated files
 - README rewritten with detailed usage documentation
+- Switched to HTTPS V2 patch service URLs (us.version.battle.net)
+- Removed Ribbit.NET dependency, simplified to HTTP-only version fetching
+- Removed useRibbit configuration option
 
 ### Fixed
 
