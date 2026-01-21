@@ -1,8 +1,8 @@
-﻿{
+{
   "config": {
     "cacheDir": "cdn/",
     "checkProducts": [ "wow_classic", "wow_classic_era" ],
-    "backupProducts": [ "wow_classic_era" ],
+    "backupProducts": [ "wow_classic", "wow_classic_era" ],
     "downloadPatchFiles": true,
     "maxParallelDownloads": 4
   }
