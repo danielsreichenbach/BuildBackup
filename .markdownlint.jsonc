@@ -1,4 +1,7 @@
 {
+  // GitHub Flavored Markdown (GFM) configuration
+  // Reference: https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax
+
   "default": true,
   "MD003": {
     "style": "atx"
@@ -23,12 +26,18 @@
     "style": "ordered"
   },
   "MD033": {
+    // Allow GFM-supported HTML elements
     "allowed_elements": [
+      "br",
+      "details",
       "div",
       "img",
-      "br",
-      "sup",
-      "sub"
+      "kbd",
+      "picture",
+      "source",
+      "sub",
+      "summary",
+      "sup"
     ]
   },
   "MD035": {
@@ -38,9 +47,10 @@
     "allowed_languages": [
       "bash",
       "c",
+      "cmake",
+      "console",
       "cpp",
       "csharp",
-      "cmake",
       "diff",
       "dockerfile",
       "ebnf",
@@ -68,6 +78,9 @@
   },
   "MD046": {
     "style": "fenced"
+  },
+  "MD048": {
+    "style": "backtick"
   },
   "MD060": false
 }
