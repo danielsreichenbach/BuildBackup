@@ -413,7 +413,9 @@ namespace BuildBackup
                     }
                     else
                     {
-                        File.WriteAllBytes(args[5], RetrieveFileBytes(target, false, cdns.entries[0].path));
+                        var outputPath = Path.GetFullPath(args[5]);
+                        PathValidator.ValidateNoTraversal(args[5], "outname");
+                        File.WriteAllBytes(outputPath, RetrieveFileBytes(target, false, cdns.entries[0].path));
                     }
 
                     Environment.Exit(0);
@@ -429,7 +431,9 @@ namespace BuildBackup
 
                     GetIndexes(cdns.entries[0].path, cdnConfig.archives);
 
-                    File.WriteAllBytes(args[4], RetrieveFileBytes(target, false, cdns.entries[0].path, true));
+                    var outputPath = Path.GetFullPath(args[4]);
+                    PathValidator.ValidateNoTraversal(args[4], "outname");
+                    File.WriteAllBytes(outputPath, RetrieveFileBytes(target, false, cdns.entries[0].path, true));
 
                     Environment.Exit(0);
                 }
@@ -442,9 +446,10 @@ namespace BuildBackup
 
                     encoding = GetEncoding(Path.Combine("tpr", "wow"), buildConfig.encoding[1]).Result;
 
-                    var basedir = args[3];
+                    var basedir = Path.GetFullPath(args[3]);
+                    var listFile = PathValidator.ValidateInputFile(args[4], "list");
 
-                    var lines = File.ReadLines(args[4]);
+                    var lines = File.ReadLines(listFile);
 
                     cdnConfig = GetCDNconfig(Path.Combine("tpr", "wow"), args[2]);
 
@@ -478,7 +483,8 @@ namespace BuildBackup
 
                         try
                         {
-                            File.WriteAllBytes(Path.Combine(basedir, filename), RetrieveFileBytes(target));
+                            var outputPath = PathValidator.ValidateOutputPath(filename, basedir, "filename");
+                            File.WriteAllBytes(outputPath, RetrieveFileBytes(target));
                         }
                         catch (Exception e)
                         {
@@ -773,9 +779,10 @@ namespace BuildBackup
 
                     GetIndexes("tpr/" + product, cdnConfig.archives);
 
-                    var basedir = args[3];
+                    var basedir = Path.GetFullPath(args[3]);
+                    var listFile = PathValidator.ValidateInputFile(args[4], "list");
 
-                    var lines = File.ReadLines(args[4]);
+                    var lines = File.ReadLines(listFile);
 
                     var rootHash = "";
 
@@ -1231,7 +1238,8 @@ namespace BuildBackup
                 {
                     if (args.Length < 2) throw new Exception("Not enough arguments. Need mode, path, (numbytes)");
 
-                    var file = BLTE.Parse(File.ReadAllBytes(args[1]));
+                    var inputPath = PathValidator.ValidateInputFile(args[1], "path");
+                    var file = BLTE.Parse(File.ReadAllBytes(inputPath));
 
                     if (args.Length == 3)
                     {
@@ -1245,11 +1253,16 @@ namespace BuildBackup
                 {
                     if (args.Length == 1)
                     {
-                        File.WriteAllBytes(args[0] + ".dump", BLTE.Parse(File.ReadAllBytes(args[0])));
+                        var inputPath = PathValidator.ValidateInputFile(args[0], "path");
+                        var outputPath = inputPath + ".dump";
+                        File.WriteAllBytes(outputPath, BLTE.Parse(File.ReadAllBytes(inputPath)));
                     }
                     else if (args.Length == 3)
                     {
-                        File.WriteAllBytes(args[2], BLTE.Parse(File.ReadAllBytes(args[1])));
+                        var inputPath = PathValidator.ValidateInputFile(args[1], "path");
+                        var outputPath = Path.GetFullPath(args[2]);
+                        PathValidator.ValidateNoTraversal(args[2], "outfile");
+                        File.WriteAllBytes(outputPath, BLTE.Parse(File.ReadAllBytes(inputPath)));
                     }
                     else
                     {
@@ -1262,13 +1275,17 @@ namespace BuildBackup
 
                     if (args.Length < 3) throw new Exception("Not enough arguments. Need mode, src, dest");
 
+                    var srcDir = PathValidator.ValidateInputDirectory(args[1], "src");
+                    var destDir = Path.GetFullPath(args[2]);
+                    PathValidator.ValidateNoTraversal(args[2], "dest");
+
                     var whiteList = new List<string>() { "" };
-                    var allFiles = Directory.GetFiles(args[1], "*", SearchOption.AllDirectories).ToList();
+                    var allFiles = Directory.GetFiles(srcDir, "*", SearchOption.AllDirectories).ToList();
                     allFiles.Sort();
 
                     var fileCount = 0;
                     var totalCount = allFiles.Count;
-                    if (!args[1].Contains("wowdev"))
+                    if (!srcDir.Contains("wowdev"))
                     {
                         throw new Exception("unk encryptedproduct");
                     }
@@ -1278,7 +1295,7 @@ namespace BuildBackup
                         //if (!file.EndsWith(".index"))
                         //    continue;
 
-                        var newName = file.Replace(args[1], args[2]);
+                        var newName = file.Replace(srcDir, destDir);
 
                         if (File.Exists(newName))
                         {
@@ -1318,26 +1335,31 @@ namespace BuildBackup
                 {
                     if (args.Length < 3) throw new Exception("Not enough arguments. Need mode, path, dest");
 
-                    byte[] fileBytes = File.ReadAllBytes(args[1]);
+                    var inputPath = PathValidator.ValidateInputFile(args[1], "path");
+                    var outputPath = Path.GetFullPath(args[2]);
+                    PathValidator.ValidateNoTraversal(args[2], "dest");
 
-                    if (args[1].Contains("wowdev"))
+                    byte[] fileBytes = File.ReadAllBytes(inputPath);
+
+                    if (inputPath.Contains("wowdev"))
                     {
-                        fileBytes = BLTE.DecryptFile(Path.GetFileNameWithoutExtension(args[1]), fileBytes, "wowdevalpha");
+                        fileBytes = BLTE.DecryptFile(Path.GetFileNameWithoutExtension(inputPath), fileBytes, "wowdevalpha");
                     }
                     else
                     {
                         throw new Exception("unk encryptedproduct");
                     }
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(args[2]));
-                    File.WriteAllBytes(args[2], fileBytes);
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    File.WriteAllBytes(outputPath, fileBytes);
                     Environment.Exit(0);
                 }
                 if (args[0] == "dumprawinstall")
                 {
                     var install = new InstallFile();
 
-                    byte[] content = File.ReadAllBytes(args[1]);
+                    var inputPath = PathValidator.ValidateInputFile(args[1], "install");
+                    byte[] content = File.ReadAllBytes(inputPath);
 
 
                     using (BinaryReader bin = new BinaryReader(new MemoryStream(BLTE.Parse(content))))
@@ -1420,7 +1442,8 @@ namespace BuildBackup
                 }
                 if (args[0] == "dumparchive")
                 {
-                    var indexContent = File.ReadAllBytes(args[1]);
+                    var inputPath = PathValidator.ValidateInputFile(args[1], "indexfile");
+                    var indexContent = File.ReadAllBytes(inputPath);
                     using (var ms = new MemoryStream(indexContent))
                     using (BinaryReader bin = new BinaryReader(ms))
                     {
@@ -1450,11 +1473,11 @@ namespace BuildBackup
                         }
                     }
 
-                    var outPath = Path.Combine(Path.GetDirectoryName(args[1]), Path.GetFileNameWithoutExtension(args[1]) + "_extract");
+                    var outPath = Path.Combine(Path.GetDirectoryName(inputPath), Path.GetFileNameWithoutExtension(inputPath) + "_extract");
                     if (!Directory.Exists(outPath))
                         Directory.CreateDirectory(outPath);
 
-                    var archivePath = Path.Combine(Path.GetDirectoryName(args[1]), Path.GetFileNameWithoutExtension(args[1]));
+                    var archivePath = Path.Combine(Path.GetDirectoryName(inputPath), Path.GetFileNameWithoutExtension(inputPath));
                     using (var ms = new MemoryStream(File.ReadAllBytes(archivePath)))
                     using (var bin = new BinaryReader(ms))
                     {
