@@ -57,7 +57,7 @@ namespace BuildBackup
             {
                 if (found) continue;
 
-                var uri = new Uri("http://" + cdn + "/" + path);
+                var uri = new Uri("https://" + cdn + "/" + path);
                 var cleanName = uri.AbsolutePath;
 
                 try
@@ -118,7 +118,7 @@ namespace BuildBackup
 
             // Debug: Log all file requests with full URL for better visibility
             var displayUrl = cdnList != null && cdnList.Count > 0 
-                ? $"http://{cdnList[0]}/{path}" 
+                ? $"https://{cdnList[0]}/{path}" 
                 : path;
             Console.WriteLine($"[CDN GET] Requesting: {displayUrl}");
 
@@ -137,7 +137,7 @@ namespace BuildBackup
             var usingCache = !redownload && File.Exists(Path.Combine(cacheDir, path));
             if (usingCache)
             {
-                var cachedUrl = "http://" + (cdnList.Count > 0 ? cdnList[0] : "unknown") + "/" + path;
+                var cachedUrl = "https://" + (cdnList.Count > 0 ? cdnList[0] : "unknown") + "/" + path;
                 Console.WriteLine($"[HTTP GET - CACHED] {cachedUrl} (skipping download)");
             }
 
@@ -158,7 +158,7 @@ namespace BuildBackup
                 {
                     if (found) continue;
 
-                    var uri = new Uri("http://" + cdn + "/" + path);
+                    var uri = new Uri("https://" + cdn + "/" + path);
                     var cleanName = uri.AbsolutePath;
 
                     if (verbose)

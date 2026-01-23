@@ -2394,7 +2394,7 @@ namespace BuildBackup
             if (program == "gryphon")
             {
                 cdns.entries = new CdnsEntry[1];
-                cdns.entries[0].hosts = new string[2] { "http://cdn.blizzard.com", "http://blzddist1-a.akamaihd.net" };
+                cdns.entries[0].hosts = new string[2] { "cdn.blizzard.com", "blzddist1-a.akamaihd.net" };
                 cdns.entries[0].path = "tpr/gryphon";
                 cdns.entries[0].configPath = "configs/data/";
                 return cdns;
