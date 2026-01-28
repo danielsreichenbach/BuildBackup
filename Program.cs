@@ -55,6 +55,12 @@ namespace BuildBackup
         private static Dictionary<string, IndexEntry> patchFileIndexList = new Dictionary<string, IndexEntry>();
         private static ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim();
 
+        // Index file format constants
+        private const int IndexBlockSize = 4096;
+        private const int IndexEntriesPerBlock = 170;
+        private const int IndexHashSize = 16;
+        private const string IndexEmptyHash = "00000000000000000000000000000000";
+
         public static Dictionary<string, byte[]> cachedArmadilloKeys = new Dictionary<string, byte[]>();
 
         private static CDN cdn = new CDN();
@@ -1445,32 +1451,19 @@ namespace BuildBackup
                 {
                     var inputPath = PathValidator.ValidateInputFile(args[1], "indexfile");
                     var indexContent = File.ReadAllBytes(inputPath);
-                    using (var ms = new MemoryStream(indexContent))
-                    using (BinaryReader bin = new BinaryReader(ms))
+
+                    foreach (var (hash, size, offset) in ParseIndexEntries(indexContent))
                     {
-                        int indexEntries = indexContent.Length / 4096;
-
-                        for (var b = 0; b < indexEntries; b++)
+                        var entry = new IndexEntry
                         {
-                            for (var bi = 0; bi < 170; bi++)
-                            {
-                                var headerHash = Convert.ToHexString(bin.ReadBytes(16));
+                            index = 0,
+                            size = size,
+                            offset = offset
+                        };
 
-                                var entry = new IndexEntry()
-                                {
-                                    index = 0,
-                                    size = bin.ReadUInt32(true),
-                                    offset = bin.ReadUInt32(true)
-                                };
-                                if (!indexDictionary.ContainsKey(headerHash) && headerHash != "00000000000000000000000000000000")
-                                {
-                                    if (!indexDictionary.TryAdd(headerHash, entry))
-                                    {
-                                        Console.WriteLine("Duplicate index entry for " + headerHash + " " + "(size: " + entry.size + ", offset: " + entry.offset);
-                                    }
-                                }
-                            }
-                            bin.ReadBytes(16);
+                        if (!indexDictionary.TryAdd(hash, entry))
+                        {
+                            Console.WriteLine($"Duplicate index entry for {hash} (size: {entry.size}, offset: {entry.offset})");
                         }
                     }
 
@@ -3022,31 +3015,30 @@ namespace BuildBackup
             return returnDict;
         }
 
-        private static List<string> ParsePatchFileIndex(string url, string hash)
+        /// <summary>
+        /// Parses index file content and yields entries.
+        /// Index files use 4096-byte blocks with 170 entries each (24 bytes per entry + 16-byte footer).
+        /// </summary>
+        private static IEnumerable<(string Hash, uint Size, uint Offset)> ParseIndexEntries(byte[] indexContent)
         {
-            byte[] indexContent = cdn.Get(url + "/patch/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash + ".index").Result;
+            using var bin = new BinaryReader(new MemoryStream(indexContent));
+            int blockCount = indexContent.Length / IndexBlockSize;
 
-            var list = new List<string>();
-
-            using (BinaryReader bin = new BinaryReader(new MemoryStream(indexContent)))
+            for (var block = 0; block < blockCount; block++)
             {
-                int indexEntries = indexContent.Length / 4096;
-
-                for (var b = 0; b < indexEntries; b++)
+                for (var entry = 0; entry < IndexEntriesPerBlock; entry++)
                 {
-                    for (var bi = 0; bi < 170; bi++)
+                    var hash = Convert.ToHexString(bin.ReadBytes(IndexHashSize));
+                    var size = bin.ReadUInt32(true);
+                    var offset = bin.ReadUInt32(true);
+
+                    if (hash != IndexEmptyHash)
                     {
-                        var headerHash = Convert.ToHexString(bin.ReadBytes(16));
-
-                        var size = bin.ReadUInt32(true);
-
-                        list.Add(headerHash);
+                        yield return (hash, size, offset);
                     }
-                    bin.ReadBytes(16);
                 }
+                bin.ReadBytes(IndexHashSize); // Skip block footer/checksum
             }
-
-            return list;
         }
 
         private static void GetIndexes(string url, string[] archives)
@@ -3058,48 +3050,37 @@ namespace BuildBackup
                 {
                     byte[] indexContent = cdn.Get(url + "/data/" + archives[i][0] + archives[i][1] + "/" + archives[i][2] + archives[i][3] + "/" + archives[i] + ".index").Result;
 
-                    using (BinaryReader bin = new BinaryReader(new MemoryStream(indexContent)))
+                    foreach (var (hash, size, offset) in ParseIndexEntries(indexContent))
                     {
-                        int indexEntries = indexContent.Length / 4096;
-
-                        for (var b = 0; b < indexEntries; b++)
+                        var entry = new IndexEntry
                         {
-                            for (var bi = 0; bi < 170; bi++)
+                            index = (short)i,
+                            size = size,
+                            offset = offset
+                        };
+
+                        cacheLock.EnterUpgradeableReadLock();
+                        try
+                        {
+                            if (!indexDictionary.ContainsKey(hash))
                             {
-                                var headerHash = Convert.ToHexString(bin.ReadBytes(16));
-
-                                var entry = new IndexEntry()
-                                {
-                                    index = (short)i,
-                                    size = bin.ReadUInt32(true),
-                                    offset = bin.ReadUInt32(true)
-                                };
-
-                                cacheLock.EnterUpgradeableReadLock();
+                                cacheLock.EnterWriteLock();
                                 try
                                 {
-                                    if (!indexDictionary.ContainsKey(headerHash))
+                                    if (!indexDictionary.TryAdd(hash, entry))
                                     {
-                                        cacheLock.EnterWriteLock();
-                                        try
-                                        {
-                                            if (!indexDictionary.TryAdd(headerHash, entry))
-                                            {
-                                                Console.WriteLine("Duplicate index entry for " + headerHash + " " + "(index: " + archives[i] + ", size: " + entry.size + ", offset: " + entry.offset);
-                                            }
-                                        }
-                                        finally
-                                        {
-                                            cacheLock.ExitWriteLock();
-                                        }
+                                        Console.WriteLine($"Duplicate index entry for {hash} (index: {archives[i]}, size: {entry.size}, offset: {entry.offset})");
                                     }
                                 }
                                 finally
                                 {
-                                    cacheLock.ExitUpgradeableReadLock();
+                                    cacheLock.ExitWriteLock();
                                 }
                             }
-                            bin.ReadBytes(16);
+                        }
+                        finally
+                        {
+                            cacheLock.ExitUpgradeableReadLock();
                         }
                     }
                 }
@@ -3117,48 +3098,37 @@ namespace BuildBackup
                 {
                     byte[] indexContent = cdn.Get(url + "/patch/" + archives[i][0] + archives[i][1] + "/" + archives[i][2] + archives[i][3] + "/" + archives[i] + ".index").Result;
 
-                    using (BinaryReader bin = new BinaryReader(new MemoryStream(indexContent)))
+                    foreach (var (hash, size, offset) in ParseIndexEntries(indexContent))
                     {
-                        int indexEntries = indexContent.Length / 4096;
-
-                        for (var b = 0; b < indexEntries; b++)
+                        var entry = new IndexEntry
                         {
-                            for (var bi = 0; bi < 170; bi++)
+                            index = (short)i,
+                            size = size,
+                            offset = offset
+                        };
+
+                        cacheLock.EnterUpgradeableReadLock();
+                        try
+                        {
+                            if (!patchIndexDictionary.ContainsKey(hash))
                             {
-                                var headerHash = Convert.ToHexString(bin.ReadBytes(16));
-
-                                var entry = new IndexEntry()
-                                {
-                                    index = (short)i,
-                                    size = bin.ReadUInt32(true),
-                                    offset = bin.ReadUInt32(true)
-                                };
-
-                                cacheLock.EnterUpgradeableReadLock();
+                                cacheLock.EnterWriteLock();
                                 try
                                 {
-                                    if (!patchIndexDictionary.ContainsKey(headerHash))
+                                    if (!patchIndexDictionary.TryAdd(hash, entry))
                                     {
-                                        cacheLock.EnterWriteLock();
-                                        try
-                                        {
-                                            if (!patchIndexDictionary.TryAdd(headerHash, entry))
-                                            {
-                                                Console.WriteLine("Duplicate patch index entry for " + headerHash + " " + "(index: " + archives[i] + ", size: " + entry.size + ", offset: " + entry.offset);
-                                            }
-                                        }
-                                        finally
-                                        {
-                                            cacheLock.ExitWriteLock();
-                                        }
+                                        Console.WriteLine($"Duplicate patch index entry for {hash} (index: {archives[i]}, size: {entry.size}, offset: {entry.offset})");
                                     }
                                 }
                                 finally
                                 {
-                                    cacheLock.ExitUpgradeableReadLock();
+                                    cacheLock.ExitWriteLock();
                                 }
                             }
-                            bin.ReadBytes(16);
+                        }
+                        finally
+                        {
+                            cacheLock.ExitUpgradeableReadLock();
                         }
                     }
                 }
@@ -3166,7 +3136,6 @@ namespace BuildBackup
                 {
                     Console.WriteLine("Unable to retrieve patch index: " + e.Message);
                 }
-
             });
         }
 
