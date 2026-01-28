@@ -24,7 +24,7 @@ namespace BuildBackup
             }
         }
 
-        private static string FormatFileSize(uint bytes)
+        public static string FormatFileSize(ulong bytes)
         {
             string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
             double size = bytes;

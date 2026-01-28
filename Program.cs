@@ -69,6 +69,7 @@ namespace BuildBackup
                 "cdn.arctium.tools",
                 "casc.wago.tools",
                 "archive.wow.tools",
+                "tact.mirror.reliquaryhq.com",
             };
 
             Console.WriteLine($"[CDN LIST] Initial CDN list ({cdn.cdnList.Count} servers):");
@@ -1522,6 +1523,7 @@ namespace BuildBackup
             foreach (string program in checkPrograms)
             {
                 var archiveSizes = new Dictionary<string, uint>();
+                var patchArchiveSizes = new Dictionary<string, uint>();
 
                 if (File.Exists("archiveSizes.txt"))
                 {
@@ -1531,6 +1533,18 @@ namespace BuildBackup
                         if (uint.TryParse(split[1], out uint archiveSize))
                         {
                             archiveSizes.Add(split[0], archiveSize);
+                        }
+                    }
+                }
+
+                if (File.Exists("patchArchiveSizes.txt"))
+                {
+                    foreach (var line in File.ReadAllLines("patchArchiveSizes.txt"))
+                    {
+                        var split = line.Split(' ');
+                        if (uint.TryParse(split[1], out uint patchArchiveSize))
+                        {
+                            patchArchiveSizes.Add(split[0], patchArchiveSize);
                         }
                     }
                 }
@@ -1752,6 +1766,40 @@ namespace BuildBackup
 
                             Console.WriteLine($"[SIZE CHECK] Completed: {savedCount} new sizes saved");
 
+                            // Calculate and display total download size
+                            ulong totalArchiveSize = 0;
+                            ulong alreadyDownloadedSize = 0;
+                            int archivesToDownload = 0;
+
+                            foreach (var archive in cdnConfig.archives)
+                            {
+                                if (archiveSizes.TryGetValue(archive, out uint size))
+                                {
+                                    totalArchiveSize += size;
+                                    var localPath = Path.Combine(cdn.cacheDir, cdns.entries[0].path, "data", archive[0].ToString() + archive[1].ToString(), archive[2].ToString() + archive[3].ToString(), archive);
+                                    if (File.Exists(localPath))
+                                    {
+                                        var fileInfo = new FileInfo(localPath);
+                                        if (fileInfo.Length == size)
+                                        {
+                                            alreadyDownloadedSize += size;
+                                        }
+                                        else
+                                        {
+                                            archivesToDownload++;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        archivesToDownload++;
+                                    }
+                                }
+                            }
+
+                            ulong remainingSize = totalArchiveSize - alreadyDownloadedSize;
+                            Console.WriteLine($"[DOWNLOAD] Archives: {cdnConfig.archives.Length} total, {archivesToDownload} to download");
+                            Console.WriteLine($"[DOWNLOAD] Size: {CDN.FormatFileSize(remainingSize)} remaining of {CDN.FormatFileSize(totalArchiveSize)} total");
+
                             Console.Write("Downloading " + cdnConfig.archives.Count() + " archives..");
 
                             var archiveTasks = new List<Task>();
@@ -1949,6 +1997,37 @@ namespace BuildBackup
 
                     if (!string.IsNullOrEmpty(cdnConfig.fileIndex) && fileIndexList.Count > 0)
                     {
+                        // Calculate total size for file index entries
+                        ulong totalFileIndexSize = 0;
+                        ulong alreadyDownloadedFileIndexSize = 0;
+                        int fileIndexFilesToDownload = 0;
+
+                        foreach (var entry in fileIndexList)
+                        {
+                            totalFileIndexSize += entry.Value.size;
+                            var localPath = Path.Combine(cdn.cacheDir, cdns.entries[0].path, "data", entry.Key[0].ToString() + entry.Key[1].ToString(), entry.Key[2].ToString() + entry.Key[3].ToString(), entry.Key);
+                            if (File.Exists(localPath))
+                            {
+                                var fileInfo = new FileInfo(localPath);
+                                if (fileInfo.Length == entry.Value.size)
+                                {
+                                    alreadyDownloadedFileIndexSize += entry.Value.size;
+                                }
+                                else
+                                {
+                                    fileIndexFilesToDownload++;
+                                }
+                            }
+                            else
+                            {
+                                fileIndexFilesToDownload++;
+                            }
+                        }
+
+                        ulong remainingFileIndexSize = totalFileIndexSize - alreadyDownloadedFileIndexSize;
+                        Console.WriteLine($"[DOWNLOAD] Unarchived files (file index): {fileIndexList.Count} total, {fileIndexFilesToDownload} to download");
+                        Console.WriteLine($"[DOWNLOAD] Size: {CDN.FormatFileSize(remainingFileIndexSize)} remaining of {CDN.FormatFileSize(totalFileIndexSize)} total");
+
                         Console.Write("Downloading " + fileIndexList.Count + " unarchived files from file index..");
 
                         var fileIndexTasks = new List<Task>();
@@ -1992,6 +2071,37 @@ namespace BuildBackup
 
                     if (!string.IsNullOrEmpty(cdnConfig.patchFileIndex) && SettingsManager.downloadPatchFiles && patchFileIndexList.Count > 0)
                     {
+                        // Calculate total size for patch file index entries
+                        ulong totalPatchFileIndexSize = 0;
+                        ulong alreadyDownloadedPatchFileIndexSize = 0;
+                        int patchFileIndexFilesToDownload = 0;
+
+                        foreach (var entry in patchFileIndexList)
+                        {
+                            totalPatchFileIndexSize += entry.Value.size;
+                            var localPath = Path.Combine(cdn.cacheDir, cdns.entries[0].path, "patch", entry.Key[0].ToString() + entry.Key[1].ToString(), entry.Key[2].ToString() + entry.Key[3].ToString(), entry.Key);
+                            if (File.Exists(localPath))
+                            {
+                                var fileInfo = new FileInfo(localPath);
+                                if (fileInfo.Length == entry.Value.size)
+                                {
+                                    alreadyDownloadedPatchFileIndexSize += entry.Value.size;
+                                }
+                                else
+                                {
+                                    patchFileIndexFilesToDownload++;
+                                }
+                            }
+                            else
+                            {
+                                patchFileIndexFilesToDownload++;
+                            }
+                        }
+
+                        ulong remainingPatchFileIndexSize = totalPatchFileIndexSize - alreadyDownloadedPatchFileIndexSize;
+                        Console.WriteLine($"[DOWNLOAD] Unarchived patch files (patch file index): {patchFileIndexList.Count} total, {patchFileIndexFilesToDownload} to download");
+                        Console.WriteLine($"[DOWNLOAD] Size: {CDN.FormatFileSize(remainingPatchFileIndexSize)} remaining of {CDN.FormatFileSize(totalPatchFileIndexSize)} total");
+
                         Console.Write("Downloading " + patchFileIndexList.Count + " unarchived patch files from patch file index..");
 
                         var patchFileTasks = new List<Task>();
@@ -2021,6 +2131,99 @@ namespace BuildBackup
 
                     if (SettingsManager.downloadPatchFiles && cdnConfig.patchArchives != null)
                     {
+                        Console.Write("Fetching and saving patch archive sizes...\n");
+
+                        // Get list of patch archives that need size checking
+                        var patchArchivesToCheck = cdnConfig.patchArchives.Where(archive => !patchArchiveSizes.ContainsKey(archive)).ToArray();
+                        Console.WriteLine($"[SIZE CHECK] Checking {patchArchivesToCheck.Length} patch archive sizes in parallel");
+
+                        // Create a lock for thread-safe file writing
+                        var patchSizesLock = new object();
+                        var patchSavedCount = 0;
+
+                        // Create parallel tasks for size checking
+                        var patchSizeTasks = patchArchivesToCheck.Select(async archive =>
+                        {
+                            try
+                            {
+                                await downloadThrottler.WaitAsync();
+                                try
+                                {
+                                    var remoteFileSize = await cdn.GetRemoteFileSize(cdns.entries[0].path + "/patch/" + archive[0] + archive[1] + "/" + archive[2] + archive[3] + "/" + archive);
+
+                                    // Save immediately after successful retrieval
+                                    lock (patchSizesLock)
+                                    {
+                                        patchArchiveSizes[archive] = remoteFileSize;
+                                        patchSavedCount++;
+
+                                        // Write the updated sizes to file
+                                        var patchArchiveSizesLines = new List<string>();
+                                        foreach (var patchArchiveSize in patchArchiveSizes)
+                                        {
+                                            patchArchiveSizesLines.Add(patchArchiveSize.Key + " " + patchArchiveSize.Value);
+                                        }
+                                        File.WriteAllLines("patchArchiveSizes.txt", patchArchiveSizesLines);
+
+                                        if (patchSavedCount % 10 == 0)
+                                        {
+                                            Console.WriteLine($"[SIZE CHECK] Progress: {patchSavedCount}/{patchArchivesToCheck.Length} patch sizes saved");
+                                        }
+                                    }
+
+                                    return new { Archive = archive, Size = remoteFileSize, Success = true };
+                                }
+                                finally
+                                {
+                                    downloadThrottler.Release();
+                                }
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("Failed to get remote file size for patch archive " + archive + ": " + e.Message);
+                                return new { Archive = archive, Size = 0u, Success = false };
+                            }
+                        });
+
+                        // Wait for all size checks to complete
+                        var patchSizeResults = await Task.WhenAll(patchSizeTasks);
+
+                        Console.WriteLine($"[SIZE CHECK] Completed: {patchSavedCount} new patch sizes saved");
+
+                        // Calculate and display total download size for patch archives
+                        ulong totalPatchArchiveSize = 0;
+                        ulong alreadyDownloadedPatchArchiveSize = 0;
+                        int patchArchivesToDownload = 0;
+
+                        foreach (var archive in cdnConfig.patchArchives)
+                        {
+                            if (patchArchiveSizes.TryGetValue(archive, out uint size))
+                            {
+                                totalPatchArchiveSize += size;
+                                var localPath = Path.Combine(cdn.cacheDir, cdns.entries[0].path, "patch", archive[0].ToString() + archive[1].ToString(), archive[2].ToString() + archive[3].ToString(), archive);
+                                if (File.Exists(localPath))
+                                {
+                                    var fileInfo = new FileInfo(localPath);
+                                    if (fileInfo.Length == size)
+                                    {
+                                        alreadyDownloadedPatchArchiveSize += size;
+                                    }
+                                    else
+                                    {
+                                        patchArchivesToDownload++;
+                                    }
+                                }
+                                else
+                                {
+                                    patchArchivesToDownload++;
+                                }
+                            }
+                        }
+
+                        ulong remainingPatchArchiveSize = totalPatchArchiveSize - alreadyDownloadedPatchArchiveSize;
+                        Console.WriteLine($"[DOWNLOAD] Patch archives: {cdnConfig.patchArchives.Length} total, {patchArchivesToDownload} to download");
+                        Console.WriteLine($"[DOWNLOAD] Size: {CDN.FormatFileSize(remainingPatchArchiveSize)} remaining of {CDN.FormatFileSize(totalPatchArchiveSize)} total");
+
                         Console.Write("Downloading " + cdnConfig.patchArchives.Count() + " patch archives..");
 
                         var patchArchiveTasks = new List<Task>();
@@ -2032,9 +2235,15 @@ namespace BuildBackup
                                 {
                                     try
                                     {
+                                        uint patchArchiveSize = 0;
+                                        if (patchArchiveSizes.ContainsKey(archive))
+                                        {
+                                            patchArchiveSize = patchArchiveSizes[archive];
+                                        }
+
                                         await cdn.Get(
                                             cdns.entries[0].path + "/patch/" + archive[0] + archive[1] + "/" +
-                                            archive[2] + archive[3] + "/" + archive, false, false, 0, true);
+                                            archive[2] + archive[3] + "/" + archive, false, false, patchArchiveSize, true);
                                     }
                                     catch (Exception e)
                                     {
@@ -3443,24 +3652,34 @@ namespace BuildBackup
         }
         private static async void UpdateListfile()
         {
-            if (!File.Exists("listfile.txt") || DateTime.Now.AddHours(-1) > File.GetLastWriteTime("listfile.txt"))
+            if (!File.Exists("listfile.txt") || DateTime.Now.AddHours(-24) > File.GetLastWriteTime("listfile.txt"))
             {
                 using (var client = new HttpClient())
                 {
-                    client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip");
                     client.DefaultRequestHeaders.Add("User-Agent", "BuildBackup");
 
-                    var listfileUrl = "https://github.com/wowdev/wow-listfile/raw/master/listfile.txt";
+                    var listfileUrl = "https://github.com/wowdev/wow-listfile/releases/latest/download/community-listfile.csv";
                     Console.WriteLine($"[HTTP GET] {listfileUrl}");
                     var response = await client.GetAsync(listfileUrl);
                     response.EnsureSuccessStatusCode();
 
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress))
-                    using (var memoryStream = new MemoryStream())
+                    var content = await response.Content.ReadAsStringAsync();
+
+                    // CSV format is FileDataID;FileName - extract just the filenames
+                    using (var writer = new StreamWriter("listfile.txt"))
                     {
-                        await gzipStream.CopyToAsync(memoryStream);
-                        await File.WriteAllBytesAsync("listfile.txt", memoryStream.ToArray());
+                        using (var reader = new StringReader(content))
+                        {
+                            string line;
+                            while ((line = reader.ReadLine()) != null)
+                            {
+                                var parts = line.Split(';');
+                                if (parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                                {
+                                    await writer.WriteLineAsync(parts[1]);
+                                }
+                            }
+                        }
                     }
                 }
             }
