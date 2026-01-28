@@ -3310,11 +3310,11 @@ namespace BuildBackup
         {
             var encoding = new EncodingFile();
 
-            byte[] content;
-            BinaryReader bin;
+            // Get the raw data first
+            byte[] data;
             if (encoded)
             {
-                content = await cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash);
+                var content = await cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash);
 
                 if (encodingSize != 0 && encodingSize != content.Length)
                 {
@@ -3326,13 +3326,15 @@ namespace BuildBackup
                     }
                 }
 
-                bin = new BinaryReader(new MemoryStream(BLTE.Parse(content)));
+                data = BLTE.Parse(content);
             }
             else
             {
-                bin = new BinaryReader(new MemoryStream(File.ReadAllBytes(url)));
+                data = File.ReadAllBytes(url);
             }
 
+            // Parse the encoding file with proper resource disposal
+            using var bin = new BinaryReader(new MemoryStream(data));
 
             if (Encoding.UTF8.GetString(bin.ReadBytes(2)) != "EN") { throw new Exception("Error while parsing encoding file. Did BLTE header size change?"); }
             encoding.unk1 = bin.ReadByte();
