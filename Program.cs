@@ -2419,44 +2419,6 @@ namespace BuildBackup
             return new byte[0];
         }
 
-        private static CDNConfigFile GetCDNconfigWithFallback(string configPath, string dataPath, string hash)
-        {
-            // Try the new config path first (tpr/configs/data)
-            try
-            {
-                Console.WriteLine($"[CONFIG] Trying CDN config path: {configPath}");
-                var config = GetCDNconfig(configPath, hash);
-                if (config.archives != null && config.archives.Length > 0)
-                {
-                    Console.WriteLine($"[CONFIG] CDN config found at config path");
-                    return config;
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[CONFIG] CDN config not found at config path: {e.Message}");
-            }
-
-            // Fallback to old path structure (tpr/wow/config)
-            try
-            {
-                Console.WriteLine($"[CONFIG] Trying CDN config fallback path: {dataPath}/config");
-                var config = GetCDNconfig(CombinePath(dataPath, "config"), hash);
-                if (config.archives != null && config.archives.Length > 0)
-                {
-                    Console.WriteLine($"[CONFIG] CDN config found at fallback path");
-                    return config;
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[CONFIG] CDN config not found at fallback path: {e.Message}");
-            }
-
-            Console.WriteLine($"[CONFIG] CDN config {hash} not found in any location");
-            return new CDNConfigFile();
-        }
-
         private static CDNConfigFile GetCDNconfig(string url, string hash)
         {
             string content;
@@ -2747,44 +2709,6 @@ namespace BuildBackup
                 gblob.decryptionKeyName = json.all.config.decryption_key_name.Value;
             }
             return gblob;
-        }
-
-        private static BuildConfigFile GetBuildConfigWithFallback(string configPath, string dataPath, string hash)
-        {
-            // Try the new config path first (tpr/configs/data)
-            try
-            {
-                Console.WriteLine($"[CONFIG] Trying config path: {configPath}");
-                var config = GetBuildConfig(configPath, hash);
-                if (!string.IsNullOrWhiteSpace(config.buildName))
-                {
-                    Console.WriteLine($"[CONFIG] Found at config path");
-                    return config;
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[CONFIG] Not found at config path: {e.Message}");
-            }
-
-            // Fallback to old path structure (tpr/wow/config)
-            try
-            {
-                Console.WriteLine($"[CONFIG] Trying fallback path: {dataPath}/config");
-                var config = GetBuildConfig(CombinePath(dataPath, "config"), hash);
-                if (!string.IsNullOrWhiteSpace(config.buildName))
-                {
-                    Console.WriteLine($"[CONFIG] Found at fallback path");
-                    return config;
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[CONFIG] Not found at fallback path: {e.Message}");
-            }
-
-            Console.WriteLine($"[CONFIG] Build config {hash} not found in any location");
-            return new BuildConfigFile();
         }
 
         private static BuildConfigFile GetBuildConfig(string url, string hash)
