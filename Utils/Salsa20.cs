@@ -219,6 +219,10 @@ namespace BuildBackup
                 if (inputCount < 0)
                     throw new ArgumentOutOfRangeException("inputCount");
 
+                // Handle empty input case - valid for stream ciphers
+                if (inputCount == 0)
+                    return Array.Empty<byte>();
+
                 byte[] output = new byte[inputCount];
                 TransformBlock(inputBuffer, inputOffset, inputCount, output, 0);
                 return output;
