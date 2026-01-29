@@ -5,6 +5,13 @@
         <TargetFramework>net9.0</TargetFramework>
     </PropertyGroup>
 
+    <!-- Exclude test project from main compilation -->
+    <ItemGroup>
+        <Compile Remove="BuildBackup.Tests\**" />
+        <EmbeddedResource Remove="BuildBackup.Tests\**" />
+        <None Remove="BuildBackup.Tests\**" />
+    </ItemGroup>
+
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     </PropertyGroup>
