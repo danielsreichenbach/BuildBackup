@@ -5,6 +5,46 @@ All notable changes to BuildBackup are documented in this file.
 This project does not use semantic versioning tags. Changes are organized chronologically
 by development period.
 
+## 2026-01-29
+
+### Fixed
+
+- Changed `async void UpdateListfile()` to `async Task UpdateListfileAsync()` to prevent
+  unobservable exceptions and process crashes
+- Added path validation to `cachebuild` command to prevent path traversal attacks
+
+## 2026-01-28
+
+### Added
+
+- TACT encryption key download from GitHub with local caching
+- Download progress reporting for CDN operations
+
+### Changed
+
+- Extracted unified index parsing method for archive and patch indexes
+- Updated external CDN mirror sources
+
+### Fixed
+
+- Properly dispose BinaryReader in GetEncoding to prevent resource leaks
+
+### Removed
+
+- Unused config fallback methods
+- MimeKit dependency (unused)
+
+## 2026-01-23
+
+### Added
+
+- PathValidator utility for input validation and path traversal prevention
+
+### Fixed
+
+- Use cryptographic RNG in Salsa20 implementation instead of System.Random
+- Migrated all CDN HTTP requests to HTTPS
+
 ## 2026-01-21
 
 ### Added

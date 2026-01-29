@@ -165,7 +165,7 @@ namespace BuildBackup
                     cdns = GetCDNs("wow");
 
                     var fileNames = new Dictionary<ulong, string>();
-                    UpdateListfile();
+                    UpdateListfileAsync().GetAwaiter().GetResult();
                     var hasher = new Jenkins96();
                     foreach (var line in File.ReadLines("listfile.txt"))
                     {
@@ -212,7 +212,7 @@ namespace BuildBackup
                     cdns = GetCDNs(product);
 
                     var hasher = new Jenkins96();
-                    UpdateListfile();
+                    UpdateListfileAsync().GetAwaiter().GetResult();
                     var hashes = File
                         .ReadLines("listfile.txt")
                         .Select<string, Tuple<ulong, string>>(fileName => new Tuple<ulong, string>(hasher.ComputeHash(fileName), fileName))
@@ -298,7 +298,7 @@ namespace BuildBackup
                     }
                     else
                     {
-                        UpdateListfile();
+                        UpdateListfileAsync().GetAwaiter().GetResult();
                         target = "listfile.txt";
                     }
 
@@ -505,6 +505,10 @@ namespace BuildBackup
                 {
                     if (args.Length != 4) throw new Exception("Not enough arguments. Need mode, buildconfig, cdnconfig, basedir");
 
+                    // Validate basedir to prevent path traversal attacks
+                    PathValidator.ValidateNoTraversal(args[3], "basedir");
+                    var basedir = Path.GetFullPath(args[3]);
+
                     buildConfig = GetBuildConfig(Path.Combine("tpr", "wow"), args[1]);
                     if (string.IsNullOrWhiteSpace(buildConfig.buildName)) { Console.WriteLine("Invalid buildConfig!"); }
 
@@ -514,7 +518,6 @@ namespace BuildBackup
 
                     GetIndexes(Path.Combine("tpr", "wow"), cdnConfig.archives);
 
-                    var basedir = args[3];
                     var rootHash = "";
 
                     foreach (var entry in encoding.aEntries)
@@ -3545,13 +3548,14 @@ namespace BuildBackup
 
             return patchFile;
         }
-        private static async void UpdateListfile()
+        private static async Task UpdateListfileAsync()
         {
             if (!File.Exists("listfile.txt") || DateTime.Now.AddHours(-24) > File.GetLastWriteTime("listfile.txt"))
             {
                 using (var client = new HttpClient())
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "BuildBackup");
+                    client.Timeout = TimeSpan.FromSeconds(60);
 
                     var listfileUrl = "https://github.com/wowdev/wow-listfile/releases/latest/download/community-listfile.csv";
                     Console.WriteLine($"[HTTP GET] {listfileUrl}");
@@ -3560,8 +3564,11 @@ namespace BuildBackup
 
                     var content = await response.Content.ReadAsStringAsync();
 
+                    // Write to temp file first for atomic update
+                    var tempFile = "listfile.txt.tmp";
+
                     // CSV format is FileDataID;FileName - extract just the filenames
-                    using (var writer = new StreamWriter("listfile.txt"))
+                    using (var writer = new StreamWriter(tempFile))
                     {
                         using (var reader = new StringReader(content))
                         {
@@ -3576,6 +3583,9 @@ namespace BuildBackup
                             }
                         }
                     }
+
+                    // Atomic rename to avoid partial file reads
+                    File.Move(tempFile, "listfile.txt", overwrite: true);
                 }
             }
         }
