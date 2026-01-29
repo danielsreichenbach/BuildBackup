@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26403.7
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BuildBackup", "BuildBackup.csproj", "{7A7ADAC8-F8D4-4557-949F-67BCF6F3057D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BuildBackup", "BuildBackup\BuildBackup.csproj", "{7A7ADAC8-F8D4-4557-949F-67BCF6F3057D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildBackup.Tests", "BuildBackup.Tests\BuildBackup.Tests.csproj", "{A8A45506-01B4-4D44-92DC-47BE1E575663}"
 EndProject
