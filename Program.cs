@@ -104,6 +104,8 @@ namespace BuildBackup
                 if (args[0] == "dumpinfo")
                 {
                     if (args.Length != 4) throw new Exception("Not enough arguments. Need mode, product, buildconfig, cdnconfig");
+                    PathValidator.ValidateHash(args[2], 32, "buildconfig");
+                    PathValidator.ValidateHash(args[3], 32, "cdnconfig");
 
                     cdns = GetCDNs(args[1]);
 
@@ -162,6 +164,7 @@ namespace BuildBackup
                 if (args[0] == "dumproot")
                 {
                     if (args.Length != 2) throw new Exception("Not enough arguments. Need mode, root");
+                    PathValidator.ValidateHash(args[1], 32, "root");
                     cdns = GetCDNs("wow");
 
                     var fileNames = new Dictionary<ulong, string>();
@@ -202,6 +205,7 @@ namespace BuildBackup
                 if (args[0] == "dumproot2")
                 {
                     if (args.Length < 2) throw new Exception("Not enough arguments. Need mode, root");
+                    PathValidator.ValidateHash(args[1], 32, "root");
 
                     var product = "wow";
                     if (args.Length == 3)
@@ -251,6 +255,7 @@ namespace BuildBackup
                 if (args[0] == "dumproot3")
                 {
                     if (args.Length != 2) throw new Exception("Not enough arguments. Need mode, root");
+                    PathValidator.ValidateHash(args[1], 32, "root");
                     cdns = GetCDNs("wow");
 
                     var root = GetRoot(cdns.entries[0].path + "/", args[1], true);
@@ -268,6 +273,7 @@ namespace BuildBackup
                 if (args[0] == "dumproot4")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, root");
+                    PathValidator.ValidateHash(args[2], 32, "root");
 
                     var root = GetRoot("tpr/" + args[1] + "/", args[2], true);
 
@@ -315,6 +321,7 @@ namespace BuildBackup
                 if (args[0] == "dumpinstall")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, install");
+                    PathValidator.ValidateHash(args[2], 32, "install");
 
                     cdns = GetCDNs(args[1]);
                     install = GetInstall(cdns.entries[0].path + "/", args[2], true);
@@ -327,6 +334,7 @@ namespace BuildBackup
                 if (args[0] == "dumpdownload")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, download");
+                    PathValidator.ValidateHash(args[2], 32, "download");
 
                     cdns = GetCDNs(args[1]);
                     var download = GetDownload(cdns.entries[0].path + "/", args[2], true);
@@ -339,6 +347,7 @@ namespace BuildBackup
                 if (args[0] == "dumpdecodedencoding")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, encoding");
+                    PathValidator.ValidateHash(args[2], 32, "encoding");
 
                     encoding = GetEncoding(args[1], args[2], 0, true, false, false).Result;
                     foreach (var entry in encoding.aEntries)
@@ -355,6 +364,7 @@ namespace BuildBackup
                 if (args[0] == "dumpencoding")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, encoding");
+                    PathValidator.ValidateHash(args[2], 32, "encoding");
 
                     encoding = GetEncoding("tpr/" + args[1] + "/", args[2], 0, true).Result;
                     foreach (var entry in encoding.aEntries)
@@ -371,6 +381,7 @@ namespace BuildBackup
                 if (args[0] == "dumpconfig")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, hash");
+                    PathValidator.ValidateHash(args[2], 32, "hash");
                     var product = args[1];
                     var hash = Path.GetFileNameWithoutExtension(args[2]);
                     var content = Encoding.UTF8.GetString(cdn.Get(CombinePath("tpr/" + product, "config/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash)).Result);
@@ -380,6 +391,9 @@ namespace BuildBackup
                 if (args[0] == "extractfilebycontenthash" || args[0] == "extractrawfilebycontenthash")
                 {
                     if (args.Length != 6) throw new Exception("Not enough arguments. Need mode, product, buildconfig, cdnconfig, contenthash, outname");
+                    PathValidator.ValidateHash(args[2], 32, "buildconfig");
+                    PathValidator.ValidateHash(args[3], 32, "cdnconfig");
+                    PathValidator.ValidateHash(args[4], 32, "contenthash");
 
                     cdns = GetCDNs(args[1]);
 
@@ -430,6 +444,8 @@ namespace BuildBackup
                 if (args[0] == "extractfilebyencodingkey")
                 {
                     if (args.Length != 5) throw new Exception("Not enough arguments. Need mode, product, cdnconfig, contenthash, outname");
+                    PathValidator.ValidateHash(args[2], 32, "cdnconfig");
+                    PathValidator.ValidateHash(args[3], 32, "contenthash");
 
                     cdns = GetCDNs(args[1]);
                     cdnConfig = GetCDNconfig(CombinePath(cdns.entries[0].path, "config"), args[2]);
@@ -504,6 +520,8 @@ namespace BuildBackup
                 if (args[0] == "cachebuild")
                 {
                     if (args.Length != 4) throw new Exception("Not enough arguments. Need mode, buildconfig, cdnconfig, basedir");
+                    PathValidator.ValidateHash(args[1], 32, "buildconfig");
+                    PathValidator.ValidateHash(args[2], 32, "cdnconfig");
 
                     // Validate basedir to prevent path traversal attacks
                     PathValidator.ValidateNoTraversal(args[3], "basedir");
@@ -1045,6 +1063,8 @@ namespace BuildBackup
                 {
                     if (args.Length == 4)
                     {
+                        PathValidator.ValidateHash(args[2], 32, "buildconfig");
+                        PathValidator.ValidateHash(args[3], 32, "cdnconfig");
                         checkPrograms = new string[] { args[1] };
                         backupPrograms = new string[] { args[1] };
                         overrideBuildconfig = args[2];
@@ -1063,6 +1083,7 @@ namespace BuildBackup
                 if (args[0] == "dumpencrypted")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, buildconfig");
+                    PathValidator.ValidateHash(args[2], 32, "buildconfig");
 
                     if (args[1] != "wow")
                     {
@@ -1148,6 +1169,7 @@ namespace BuildBackup
                 if (args[0] == "dumpbadlyencrypted")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, buildconfig");
+                    PathValidator.ValidateHash(args[2], 32, "buildconfig");
 
                     if (args[1] != "wow")
                     {
@@ -1224,6 +1246,7 @@ namespace BuildBackup
                 if (args[0] == "dumpsizes")
                 {
                     if (args.Length != 3) throw new Exception("Not enough arguments. Need mode, product, buildconfig");
+                    PathValidator.ValidateHash(args[2], 32, "buildconfig");
 
                     if (args[1] != "wow")
                     {
@@ -1428,6 +1451,7 @@ namespace BuildBackup
                 if (args[0] == "dumpindex")
                 {
                     if (args.Length < 3) throw new Exception("Not enough arguments. Need mode, product, hash, (folder)");
+                    PathValidator.ValidateHash(args[2], 32, "hash");
 
                     cdns = GetCDNs(args[1]);
 

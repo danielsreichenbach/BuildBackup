@@ -7,6 +7,11 @@ by development period.
 
 ## 2026-01-29
 
+### Added
+
+- Hash validation for all command-line hash parameters using `PathValidator.ValidateHash()`
+  to ensure inputs are valid 32-character hexadecimal strings before processing
+
 ### Fixed
 
 - Changed `async void UpdateListfile()` to `async Task UpdateListfileAsync()` to prevent
