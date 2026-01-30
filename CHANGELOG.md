@@ -11,12 +11,21 @@ by development period.
 
 - Hash validation for all command-line hash parameters using `PathValidator.ValidateHash()`
   to ensure inputs are valid 32-character hexadecimal strings before processing
+- Test infrastructure with 183 tests covering utility classes (PathValidator, Jenkins96,
+  Salsa20, BinaryReaderExtensions, MultiDictionary)
+
+### Changed
+
+- Restructured project to TACTSharp layout: source files moved to `BuildBackup/` subdirectory,
+  solution file at root, test project in `BuildBackup.Tests/`
+- Commands now require `--project BuildBackup` flag when running from solution root
 
 ### Fixed
 
 - Changed `async void UpdateListfile()` to `async Task UpdateListfileAsync()` to prevent
   unobservable exceptions and process crashes
 - Added path validation to `cachebuild` command to prevent path traversal attacks
+- Fixed empty input handling in Salsa20 TransformFinalBlock
 
 ## 2026-01-28
 

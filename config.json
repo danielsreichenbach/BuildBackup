@@ -1,6 +1,6 @@
 {
   "config": {
-    "cacheDir": "cdn/",
+    "cacheDir": "/home/danielsreichenbach/.cache/cascette/cdn/",
     "checkProducts": [ "wow_classic", "wow_classic_era" ],
     "backupProducts": [ "wow_classic", "wow_classic_era" ],
     "downloadPatchFiles": true,

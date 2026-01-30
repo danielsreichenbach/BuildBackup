@@ -17,41 +17,30 @@ replacement for Blizzard's NGDP systems.
 
 This maintained fork includes:
 
-- Updated dependencies and .NET 9.0 compatibility
-- Enhanced error handling and stability improvements
-- Additional CDN endpoints for improved reliability
+- .NET 9.0 compatibility
+- Additional CDN endpoints for failover
 - Support for newer game versions (WoW 11.1+)
-- Expanded debugging and analysis tools
 
-**Long-term Vision**: The WoW Emulation project is actively working on building
-a full solution to replace and replicate Blizzard's NGDP (Next Generation Distribution
-Pipeline) systems. Once their comprehensive solution is ready, this fork will be
-deprecated in favor of their more complete implementation.
+**Long-term Vision**: The WoW Emulation project is working on a replacement for
+Blizzard's NGDP (Next Generation Distribution Pipeline) systems. This fork will be
+deprecated when that implementation is ready.
 
-## Enhanced Features
+## Features
 
-This maintained fork includes several key improvements over the original:
+**Resume Interrupted Downloads** - Downloads resume from where they stopped.
 
-**Resume Interrupted Downloads** - Never lose progress again! Downloads automatically resume
-from where they left off if interrupted.
+**Parallel Downloads** - Configurable concurrent downloads (default: 4, set via
+`maxParallelDownloads` in config.json).
 
-**Parallel Downloads** - Configurable concurrent downloads for faster backup operations
-(default: 4, configurable via `maxParallelDownloads` in config.json).
+**CDN Failover** - Multiple CDN endpoints with automatic failover:
 
-**Enhanced CDN Failover** - Multiple CDN endpoints with automatic failover:
+- Official CDN hosts from Blizzard V2 API (added at runtime)
+- cdn.arctium.tools
+- casc.wago.tools
+- archive.wow.tools
+- tact.mirror.reliquaryhq.com
 
-- Official CDN hosts from Ribbit API (dynamically added at runtime)
-- cdn.arctium.tools (Arctium Launcher archive)
-- casc.wago.tools (wago.tools CDN)
-- archive.wow.tools (wow.tools archive)
-
-**30+ Debugging Commands** - Comprehensive CASC analysis tools for developers and researchers.
-
-**Detailed Logging** - Enhanced HTTP request logging and error handling throughout the
-application.
-
-**Modern Dependencies** - Updated to .NET 9.0 with latest NuGet packages for improved stability
-and performance.
+**30+ Commands** - CASC analysis and extraction tools.
 
 ## Description
 
@@ -107,7 +96,6 @@ Files will be saved in the path specified in a `config.json` file like:
     "cacheDir": "/var/www/wow.tools/",
     "checkProducts": [ "wow", "wow_classic", "wow_classic_era" ],
     "backupProducts": [ "wow_classic_era" ],
-    "useRibbit": false,
     "downloadPatchFiles": true,
     "maxParallelDownloads": 4
   }
@@ -119,7 +107,6 @@ Files will be saved in the path specified in a `config.json` file like:
 - `cacheDir` - Directory where downloaded files will be stored
 - `checkProducts` - Array of product codes to check for updates
 - `backupProducts` - Array of product codes to fully backup
-- `useRibbit` - Whether to use Ribbit API for version info (default: false)
 - `downloadPatchFiles` - Whether to download patch files (default: true)
 - `maxParallelDownloads` - Number of concurrent downloads (default: 4)
 
@@ -127,79 +114,77 @@ Files will be saved in the path specified in a `config.json` file like:
 
 ### Default Operation
 
-When run without arguments, the application will check products listed in the `checkProducts`
-configuration and backup products listed in `backupProducts`:
+When run without arguments, the application checks products listed in `checkProducts`
+and backs up products listed in `backupProducts`:
 
 ```bash
 dotnet build
-dotnet run
+dotnet run --project BuildBackup
 ```
 
 ### Available Commands
-
-The tool supports the following operations:
 
 #### Build Operations
 
 ```bash
 # Force backup of specific build
-dotnet run forcebuild <product> <buildconfig> <cdnconfig>
+dotnet run --project BuildBackup -- forcebuild <product> <buildconfig> <cdnconfig>
 
 # Force backup of specific product
-dotnet run forceprogram <product>
+dotnet run --project BuildBackup -- forceprogram <product>
 
 # Enable partial download mode
-dotnet run partialdl
+dotnet run --project BuildBackup -- partialdl
 ```
 
 #### File Extraction
 
 ```bash
 # Extract file by content hash
-dotnet run extractfilebycontenthash <product> <buildconfig> <cdnconfig> <contenthash> <outname>
+dotnet run --project BuildBackup -- extractfilebycontenthash <product> <buildconfig> <cdnconfig> <contenthash> <outname>
 
 # Extract raw file by content hash
-dotnet run extractrawfilebycontenthash <product> <buildconfig> <cdnconfig> <contenthash> <outname>
+dotnet run --project BuildBackup -- extractrawfilebycontenthash <product> <buildconfig> <cdnconfig> <contenthash> <outname>
 
 # Extract file by encoding key
-dotnet run extractfilebyencodingkey <product> <cdnconfig> <contenthash> <outname>
+dotnet run --project BuildBackup -- extractfilebyencodingkey <product> <cdnconfig> <contenthash> <outname>
 
 # Extract files from list
-dotnet run extractfilesbylist <buildconfig> <cdnconfig> <basedir> <list>
+dotnet run --project BuildBackup -- extractfilesbylist <buildconfig> <cdnconfig> <basedir> <list>
 
 # Extract files by filename list
-dotnet run extractfilesbyfnamelist <buildconfig> <cdnconfig> <basedir> <list> [product]
+dotnet run --project BuildBackup -- extractfilesbyfnamelist <buildconfig> <cdnconfig> <basedir> <list> [product]
 
 # Extract files by FileDataID list
-dotnet run extractfilesbyfdidlist <buildconfig> <cdnconfig> <basedir> <list> [product]
+dotnet run --project BuildBackup -- extractfilesbyfdidlist <buildconfig> <cdnconfig> <basedir> <list> [product]
 ```
 
 #### Data Analysis and Debugging
 
 ```bash
 # Dump build information
-dotnet run dumpinfo <product> <buildconfig> <cdnconfig>
+dotnet run --project BuildBackup -- dumpinfo <product> <buildconfig> <cdnconfig>
 
 # Dump root file contents (multiple variants)
-dotnet run dumproot <root>
-dotnet run dumproot2 <root> [product]
-dotnet run dumproot3 <root>
-dotnet run dumproot4 <product> <root>
+dotnet run --project BuildBackup -- dumproot <root>
+dotnet run --project BuildBackup -- dumproot2 <root> [product]
+dotnet run --project BuildBackup -- dumproot3 <root>
+dotnet run --project BuildBackup -- dumproot4 <product> <root>
 
 # Dump various file types
-dotnet run dumpinstall <product> <install>
-dotnet run dumpdownload <product> <download>
-dotnet run dumpencoding <product> <encoding>
-dotnet run dumpconfig <product> <hash>
+dotnet run --project BuildBackup -- dumpinstall <product> <install>
+dotnet run --project BuildBackup -- dumpdownload <product> <download>
+dotnet run --project BuildBackup -- dumpencoding <product> <encoding>
+dotnet run --project BuildBackup -- dumpconfig <product> <hash>
 
 # WoW-specific commands
-dotnet run dumpencrypted <product> <buildconfig>
-dotnet run dumpsizes <product> <buildconfig>
+dotnet run --project BuildBackup -- dumpencrypted <product> <buildconfig>
+dotnet run --project BuildBackup -- dumpsizes <product> <buildconfig>
 
 # Utility commands
-dotnet run calchash <string>
-dotnet run calchashlistfile <file>
-dotnet run cachebuild <buildconfig> <cdnconfig> <basedir>
+dotnet run --project BuildBackup -- calchash <string>
+dotnet run --project BuildBackup -- calchashlistfile <file>
+dotnet run --project BuildBackup -- cachebuild <buildconfig> <cdnconfig> <basedir>
 ```
 
 ## Troubleshooting
@@ -208,7 +193,7 @@ dotnet run cachebuild <buildconfig> <cdnconfig> <basedir>
 
 #### Config not found or configuration errors
 
-- Ensure `config.json` exists in the project root directory
+- Ensure `config.json` exists in the solution root directory (where BuildBackup.sln is located)
 - Verify JSON syntax is valid (use a JSON validator if needed)
 - Check that `cacheDir` path is accessible and has write permissions
 

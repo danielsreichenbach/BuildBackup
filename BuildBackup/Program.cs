@@ -67,7 +67,9 @@ namespace BuildBackup
 
         static async Task Main(string[] args)
         {
-            cdn.cacheDir = SettingsManager.cacheDir;
+            try
+            {
+                cdn.cacheDir = SettingsManager.cacheDir;
             cdn.client = new HttpClient();
             cdn.client.Timeout = new TimeSpan(0, 5, 0);
             cdn.cdnList = new List<string> {
@@ -2366,6 +2368,13 @@ namespace BuildBackup
                 }
 
                 GC.Collect();
+                }
+            }
+            finally
+            {
+                // Dispose services for proper resource cleanup
+                cdn.Dispose();
+                Logger.Shutdown();
             }
         }
 

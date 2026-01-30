@@ -7,287 +7,110 @@ using System.Threading.Tasks;
 
 namespace BuildBackup
 {
-    public class CDN
+    public class CDN : IDisposable
     {
+        private Services.CdnClient _cdnClient;
+        private bool _disposed;
+        
+
+        // Backward-compatible public fields
         public HttpClient client;
         public string cacheDir;
         public List<string> cdnList;
         public string decryptionKeyName;
-        private static SemaphoreSlim downloadSemaphore;
+
+        /// <summary>
+        /// Gets the underlying ICdnClient instance for dependency injection scenarios.
+        /// Only available after InitializeParallelDownloads() is called.
+        /// </summary>
+        public Interfaces.ICdnClient Instance => _cdnClient;
+
+        /// <summary>
+        /// Creates a new CDN wrapper. Fields must be set before calling other methods.
+        /// </summary>
+        public CDN()
+        {
+            cdnList = new List<string>();
+        }
+
+        /// <summary>
+        /// Creates a new CDN wrapper using the provided HttpClient and settings.
+        /// </summary>
+        public CDN(HttpClient httpClient, string cacheDir)
+        {
+            client = httpClient;
+            this.cacheDir = cacheDir;
+            cdnList = new List<string>();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_cdnClient == null)
+            {
+                _cdnClient = new Services.CdnClient(
+                    client,
+                    Logger.Instance,
+                    cacheDir,
+                    cdnList,
+                    SettingsManager.maxParallelDownloads);
+            }
+
+            // Sync decryptionKeyName
+            if (_cdnClient != null && decryptionKeyName != _cdnClient.DecryptionKeyName)
+            {
+                _cdnClient.DecryptionKeyName = decryptionKeyName ?? "";
+            }
+
+            // Sync any new CDN servers
+            if (_cdnClient != null)
+            {
+                foreach (var cdn in cdnList)
+                {
+                    _cdnClient.AddCdnServer(cdn);
+                }
+            }
+        }
 
         public void InitializeParallelDownloads()
         {
-            if (downloadSemaphore == null)
-            {
-                downloadSemaphore = new SemaphoreSlim(SettingsManager.maxParallelDownloads, SettingsManager.maxParallelDownloads);
-                Console.WriteLine($"[PARALLEL] Initialized with {SettingsManager.maxParallelDownloads} concurrent downloads");
-            }
+            EnsureInitialized();
+            _cdnClient.InitializeParallelDownloads();
+            
         }
 
         public static string FormatFileSize(ulong bytes)
         {
-            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
-            double size = bytes;
-            int suffixIndex = 0;
-
-            while (size >= 1024 && suffixIndex < suffixes.Length - 1)
-            {
-                size /= 1024;
-                suffixIndex++;
-            }
-
-            return $"{size:0.##} {suffixes[suffixIndex]}";
-        }
-
-        private void EnsureSemaphoreInitialized()
-        {
-            if (downloadSemaphore == null)
-            {
-                Console.WriteLine($"[PARALLEL] WARNING: Semaphore was null, initializing on demand");
-                downloadSemaphore = new SemaphoreSlim(SettingsManager.maxParallelDownloads, SettingsManager.maxParallelDownloads);
-            }
+            return Interfaces.CdnUtils.FormatFileSize(bytes);
         }
 
         public async Task<uint> GetRemoteFileSize(string path, bool verbose = false)
         {
-            path = path.ToLower();
-            var found = false;
-
-            foreach (var cdn in cdnList)
-            {
-                if (found) continue;
-
-                var uri = new Uri("https://" + cdn + "/" + path);
-                var cleanName = uri.AbsolutePath;
-
-                try
-                {
-                    if (verbose)
-                        Console.WriteLine($"[HTTP GET - SIZE CHECK] {uri.AbsoluteUri}");
-                    
-                    using (var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead))
-                    {
-                        if (response.IsSuccessStatusCode)
-                        {
-                            found = true;
-
-                            if (response.Content.Headers.ContentLength != null)
-                            {
-                                var size = (uint)response.Content.Headers.ContentLength;
-                                var humanSize = FormatFileSize(size);
-                                Console.WriteLine($"[SIZE] {path}: {humanSize}");
-                                return size;
-                            }
-                            else
-                            {
-                                if (verbose)
-                                    Console.WriteLine($"[HTTP GET - SIZE FOUND] No content length header from {cdn}");
-                                return 0;
-                            }
-                        }
-                        else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                        {
-                            Logger.WriteLine("File not found on CDN " + cdn + " trying next CDN (if available)..");
-                        }
-                        else
-                        {
-                            throw new FileNotFoundException("Error retrieving file: HTTP status code " + response.StatusCode + " on URL " + uri.AbsoluteUri);
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    Logger.WriteLine("!!! Error retrieving file size " + uri.AbsoluteUri + ": " + e.Message);
-                }
-            }
-            if (!found)
-            {
-                if (verbose)
-                    Console.WriteLine($"[SIZE NOT FOUND] {path} - not found on any CDN");
-                Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve filesize!", true);
-                throw new FileNotFoundException($"File {path} could not be found on any CDN host for size check. This indicates the backup is incomplete.");
-            }
-
-            return 0;
+            EnsureInitialized();
+            return await _cdnClient.GetRemoteFileSizeAsync(path, verbose);
         }
 
         public async Task<byte[]> Get(string path, bool returnstream = true, bool redownload = false, uint expectedSize = 0, bool verbose = false)
         {
-            path = path.ToLower();
-            var localPath = Path.Combine(cacheDir, path);
+            EnsureInitialized();
 
-            // Debug: Log all file requests with full URL for better visibility
-            var displayUrl = cdnList != null && cdnList.Count > 0 
-                ? $"https://{cdnList[0]}/{path}" 
-                : path;
-            Console.WriteLine($"[CDN GET] Requesting: {displayUrl}");
-
-            if (File.Exists(localPath) && expectedSize != 0)
+            var options = new Interfaces.CdnGetOptions
             {
-                var fileInfo = new FileInfo(localPath);
-                if (fileInfo.Length != expectedSize)
-                {
-                    if (verbose)
-                        Console.WriteLine("File size of " + path + " " + fileInfo.Length + " does not match expected size " + expectedSize + " redownloading..");
+                ReturnContent = returnstream,
+                ForceRedownload = redownload,
+                ExpectedSize = expectedSize,
+                Verbose = verbose
+            };
 
-                    redownload = true;
-                }
-            }
+            return await _cdnClient.GetAsync(path, options);
+        }
 
-            var usingCache = !redownload && File.Exists(Path.Combine(cacheDir, path));
-            if (usingCache)
-            {
-                var cachedUrl = "https://" + (cdnList.Count > 0 ? cdnList[0] : "unknown") + "/" + path;
-                Console.WriteLine($"[HTTP GET - CACHED] {cachedUrl} (skipping download)");
-            }
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
 
-            if (redownload || !File.Exists(Path.Combine(cacheDir, path)))
-            {
-                // Ensure semaphore is initialized
-                EnsureSemaphoreInitialized();
-
-                // Wait for available download slot
-                await downloadSemaphore.WaitAsync();
-                Console.WriteLine($"[PARALLEL] Acquired download slot for {path}");
-
-                try
-                {
-                    var found = false;
-
-                foreach (var cdn in cdnList)
-                {
-                    if (found) continue;
-
-                    var uri = new Uri("https://" + cdn + "/" + path);
-                    var cleanName = uri.AbsolutePath;
-
-                    if (verbose)
-                        Console.WriteLine("Downloading " + path + " from " + cdn);
-
-                    try
-                    {
-                        var directoryPath = Path.GetDirectoryName(cacheDir + cleanName);
-                        if (!Directory.Exists(directoryPath))
-                        {
-                            Directory.CreateDirectory(directoryPath);
-                        }
-
-                        // Check if partial file exists for resume
-                        var fullPath = cacheDir + cleanName;
-                        var existingSize = 0L;
-                        var canResume = false;
-
-                        if (File.Exists(fullPath))
-                        {
-                            existingSize = new FileInfo(fullPath).Length;
-                            if (existingSize > 0)
-                            {
-                                canResume = true;
-                                Console.WriteLine($"[HTTP GET - RESUMING] Found partial file ({existingSize} bytes): {uri.AbsoluteUri}");
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[HTTP GET - DOWNLOADING] {uri.AbsoluteUri}");
-                        }
-
-                        // Prepare HTTP request with Range header if resuming
-                        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-                        if (canResume)
-                        {
-                            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingSize, null);
-                        }
-
-                        using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
-                        using (var responseStream = await response.Content.ReadAsStreamAsync())
-                        {
-                            if (response.IsSuccessStatusCode || (canResume && response.StatusCode == System.Net.HttpStatusCode.PartialContent))
-                            {
-                                // Use append mode if resuming, create new if starting fresh
-                                using (var file = canResume ? File.OpenWrite(fullPath) : File.Create(fullPath))
-                                {
-                                    found = true;
-
-                                    // Seek to end if resuming
-                                    if (canResume)
-                                    {
-                                        file.Seek(0, SeekOrigin.End);
-                                    }
-
-                                    var buffer = new byte[4096];
-                                    int read;
-                                    long totalBytes = 0;
-                                    while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
-                                    {
-                                        file.Write(buffer, 0, read);
-                                        totalBytes += read;
-                                    }
-
-                                    if (canResume)
-                                    {
-                                        Console.WriteLine($"[HTTP GET - RESUMED] Downloaded {totalBytes} additional bytes (total: {existingSize + totalBytes}) from {cdn}");
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"[HTTP GET - SUCCESS] Downloaded {totalBytes} bytes from {cdn}");
-                                    }
-                                }
-                            }
-                            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                            {
-                                Logger.WriteLine("File not found on CDN " + cdn + " trying next CDN (if available)..");
-                            }
-                            else
-                            {
-                                throw new FileNotFoundException("Error retrieving file: HTTP status code " +
-                                                                response.StatusCode + " on URL " + uri.AbsoluteUri);
-                            }
-                        }
-                    }
-                    catch (TaskCanceledException e)
-                    {
-                        if (!e.CancellationToken.IsCancellationRequested)
-                        {
-                            Logger.WriteLine("!!! Timeout while retrieving file " + uri.AbsoluteUri);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.WriteLine("!!! Error retrieving file " + uri.AbsoluteUri + ": " + e.Message);
-                    }
-                }
-
-                    if (!found)
-                    {
-                        Console.WriteLine($"[HTTP GET - FAILED] File {Path.GetFileNameWithoutExtension(path)} not found on any CDN");
-                        Logger.WriteLine("Exhausted all CDNs looking for file " + Path.GetFileNameWithoutExtension(path) + ", cannot retrieve it!", true);
-                        throw new FileNotFoundException($"File {path} could not be found on any CDN host. This indicates the backup is incomplete.");
-                    }
-                    else
-                    {
-                        if (verbose)
-                            Console.WriteLine("Downloaded " + path);
-                    }
-                }
-                finally
-                {
-                    // Release download slot
-                    downloadSemaphore.Release();
-                    Console.WriteLine($"[PARALLEL] Released download slot for {path}");
-                }
-            }
-
-            if (returnstream)
-            {
-                if (!string.IsNullOrEmpty(decryptionKeyName))
-                    return await Task.FromResult(BLTE.DecryptFile(Path.GetFileNameWithoutExtension(path), await File.ReadAllBytesAsync(Path.Combine(cacheDir, path)), decryptionKeyName));
-                else
-                    return await File.ReadAllBytesAsync(Path.Combine(cacheDir, path));
-            }
-            else
-            {
-                return [];
-            }
+            _cdnClient?.Dispose();
+            _disposed = true;
         }
     }
 }
