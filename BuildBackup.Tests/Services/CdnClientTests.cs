@@ -154,24 +154,6 @@ public class CdnClientTests : IDisposable
     }
 
     [Fact]
-    public void ImplementsICdnClient()
-    {
-        var httpClient = new HttpClient();
-        var client = new CdnClient(httpClient, _mockLogger, _testCacheDir);
-
-        client.Should().BeAssignableTo<ICdnClient>();
-    }
-
-    [Fact]
-    public void ImplementsIDisposable()
-    {
-        var httpClient = new HttpClient();
-        var client = new CdnClient(httpClient, _mockLogger, _testCacheDir);
-
-        client.Should().BeAssignableTo<IDisposable>();
-    }
-
-    [Fact]
     public async Task GetAsync_WithCachedFile_ReturnsCachedContent()
     {
         var httpClient = new HttpClient();

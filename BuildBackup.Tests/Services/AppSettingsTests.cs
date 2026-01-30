@@ -1,4 +1,3 @@
-using BuildBackup.Interfaces;
 using BuildBackup.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -112,11 +111,4 @@ public class AppSettingsTests
         settings.MaxParallelDownloads.Should().Be(4); // Default
     }
 
-    [Fact]
-    public void ImplementsISettings()
-    {
-        var settings = new AppSettings("test/");
-
-        settings.Should().BeAssignableTo<ISettings>();
-    }
 }

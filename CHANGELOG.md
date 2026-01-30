@@ -5,6 +5,32 @@ All notable changes to BuildBackup are documented in this file.
 This project does not use semantic versioning tags. Changes are organized chronologically
 by development period.
 
+## 2026-01-30
+
+### Added
+
+- Dependency injection infrastructure with interfaces and implementations:
+  - `ISettings` / `AppSettings` for configuration management
+  - `IAppLogger` / `FileLogger` for error logging with proper disposal
+  - `ICdnClient` / `CdnClient` for CDN operations with injected dependencies
+  - `IKeyService` / `TactKeyService` for encryption key management
+- New test suites for service classes (45 tests total)
+- `CdnUtils.FormatFileSize()` static helper for file size formatting
+- Proper resource disposal in `Program.Main` via try-finally block
+
+### Changed
+
+- `SettingsManager` now delegates to `AppSettings` instance (backward compatible)
+- `Logger` now delegates to `FileLogger` with explicit `Shutdown()` method
+- `CDN` class implements `IDisposable` and uses lazy initialization
+- `KeyService` now delegates to `TactKeyService` for async key loading
+- Test count reduced from 234 to 228 by removing low-value interface implementation tests
+
+### Fixed
+
+- `Logger` StreamWriter resource leak - now properly disposed on application exit
+- `CDN` semaphore resource leak - now disposed via `IDisposable` pattern
+
 ## 2026-01-29
 
 ### Added

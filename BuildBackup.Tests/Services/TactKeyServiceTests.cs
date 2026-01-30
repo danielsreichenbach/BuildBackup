@@ -1,4 +1,3 @@
-using BuildBackup.Interfaces;
 using BuildBackup.Services;
 using FluentAssertions;
 using System.Net;
@@ -163,15 +162,6 @@ DB505078126ACB3E 5E5BDECAB8485B4F9F4D67AB9E4BB6DD
         var act = async () => await service.LoadKeysAsync();
 
         await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public void ImplementsIKeyService()
-    {
-        var httpClient = new HttpClient(new MockHttpMessageHandler(HttpStatusCode.OK, ""));
-        var service = new TactKeyService(httpClient, cacheFilePath: _testCacheFile);
-
-        service.Should().BeAssignableTo<IKeyService>();
     }
 
     [Fact]

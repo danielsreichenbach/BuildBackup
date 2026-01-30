@@ -1,4 +1,3 @@
-using BuildBackup.Interfaces;
 using BuildBackup.Services;
 using FluentAssertions;
 using Xunit;
@@ -124,22 +123,6 @@ public class FileLoggerTests : IDisposable
         var act = () => logger.LogError("Should throw");
 
         act.Should().Throw<ObjectDisposedException>();
-    }
-
-    [Fact]
-    public void ImplementsIAppLogger()
-    {
-        using var logger = new FileLogger(_testLogFile);
-
-        logger.Should().BeAssignableTo<IAppLogger>();
-    }
-
-    [Fact]
-    public void ImplementsIDisposable()
-    {
-        using var logger = new FileLogger(_testLogFile);
-
-        logger.Should().BeAssignableTo<IDisposable>();
     }
 
     [Fact]
