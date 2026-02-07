@@ -1576,33 +1576,6 @@ namespace BuildBackup
 
             foreach (string program in checkPrograms)
             {
-                var archiveSizes = new Dictionary<string, uint>();
-                var patchArchiveSizes = new Dictionary<string, uint>();
-
-                if (File.Exists("archiveSizes.txt"))
-                {
-                    foreach (var line in File.ReadAllLines("archiveSizes.txt"))
-                    {
-                        var split = line.Split(' ');
-                        if (uint.TryParse(split[1], out uint archiveSize))
-                        {
-                            archiveSizes.Add(split[0], archiveSize);
-                        }
-                    }
-                }
-
-                if (File.Exists("patchArchiveSizes.txt"))
-                {
-                    foreach (var line in File.ReadAllLines("patchArchiveSizes.txt"))
-                    {
-                        var split = line.Split(' ');
-                        if (uint.TryParse(split[1], out uint patchArchiveSize))
-                        {
-                            patchArchiveSizes.Add(split[0], patchArchiveSize);
-                        }
-                    }
-                }
-
                 Console.WriteLine("Using program " + program);
 
                 try
@@ -1687,6 +1660,36 @@ namespace BuildBackup
                 {
                     cdnConfig = GetCDNconfig(CombinePath(cdns.entries[0].path, "config"), versions.entries[0].cdnConfig);
                     currentCDNConfig = versions.entries[0].cdnConfig;
+                }
+
+                var archiveSizesFile = $"archiveSizes_{currentCDNConfig}.txt";
+                var patchArchiveSizesFile = $"patchArchiveSizes_{currentCDNConfig}.txt";
+
+                var archiveSizes = new Dictionary<string, uint>();
+                var patchArchiveSizes = new Dictionary<string, uint>();
+
+                if (File.Exists(archiveSizesFile))
+                {
+                    foreach (var line in File.ReadAllLines(archiveSizesFile))
+                    {
+                        var split = line.Split(' ');
+                        if (uint.TryParse(split[1], out uint archiveSize))
+                        {
+                            archiveSizes.Add(split[0], archiveSize);
+                        }
+                    }
+                }
+
+                if (File.Exists(patchArchiveSizesFile))
+                {
+                    foreach (var line in File.ReadAllLines(patchArchiveSizesFile))
+                    {
+                        var split = line.Split(' ');
+                        if (uint.TryParse(split[1], out uint patchArchiveSize))
+                        {
+                            patchArchiveSizes.Add(split[0], patchArchiveSize);
+                        }
+                    }
                 }
 
                 if (cdnConfig.builds != null)
@@ -1793,7 +1796,7 @@ namespace BuildBackup
                                             {
                                                 archiveSizesLines.Add(archiveSize.Key + " " + archiveSize.Value);
                                             }
-                                            File.WriteAllLines("archiveSizes.txt", archiveSizesLines);
+                                            File.WriteAllLines(archiveSizesFile, archiveSizesLines);
 
                                             if (savedCount % 10 == 0)
                                             {
@@ -2217,7 +2220,7 @@ namespace BuildBackup
                                         {
                                             patchArchiveSizesLines.Add(patchArchiveSize.Key + " " + patchArchiveSize.Value);
                                         }
-                                        File.WriteAllLines("patchArchiveSizes.txt", patchArchiveSizesLines);
+                                        File.WriteAllLines(patchArchiveSizesFile, patchArchiveSizesLines);
 
                                         if (patchSavedCount % 10 == 0)
                                         {
