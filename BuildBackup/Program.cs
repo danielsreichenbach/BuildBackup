@@ -65,6 +65,38 @@ namespace BuildBackup
 
         private static CDN cdn = new CDN();
 
+        // Parser services for testability and proper async patterns
+        private static Interfaces.IConfigParserService _configParser;
+        private static Interfaces.ICascParserService _cascParser;
+        private static Interfaces.IIndexService _indexService;
+
+        private static Interfaces.IConfigParserService GetConfigParser()
+        {
+            if (_configParser == null)
+            {
+                _configParser = new Services.ConfigParserService(cdn.client, cdn.Instance);
+            }
+            return _configParser;
+        }
+
+        private static Interfaces.ICascParserService GetCascParser()
+        {
+            if (_cascParser == null)
+            {
+                _cascParser = new Services.CascParserService(cdn.Instance);
+            }
+            return _cascParser;
+        }
+
+        private static Interfaces.IIndexService GetIndexService()
+        {
+            if (_indexService == null)
+            {
+                _indexService = new Services.IndexService(cdn.Instance);
+            }
+            return _indexService;
+        }
+
         static async Task Main(string[] args)
         {
             try
@@ -2457,319 +2489,40 @@ namespace BuildBackup
 
         private static CDNConfigFile GetCDNconfig(string url, string hash)
         {
-            string content;
-            var cdnConfig = new CDNConfigFile();
-
-            try
-            {
-                content = Encoding.UTF8.GetString(cdn.Get(CombinePath(url, hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash)).Result);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error retrieving CDN config: " + e.Message);
-                return cdnConfig;
-            }
-
-            var cdnConfigLines = content.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-            for (var i = 0; i < cdnConfigLines.Count(); i++)
-            {
-                if (cdnConfigLines[i].StartsWith("#") || cdnConfigLines[i].Length == 0) { continue; }
-                var cols = cdnConfigLines[i].Split(new string[] { " = " }, StringSplitOptions.RemoveEmptyEntries);
-                switch (cols[0])
-                {
-                    case "archives":
-                        var archives = cols[1].Split(' ');
-                        cdnConfig.archives = archives;
-                        break;
-                    case "archive-group":
-                        cdnConfig.archiveGroup = cols[1];
-                        break;
-                    case "patch-archives":
-                        if (cols.Length > 1)
-                        {
-                            var patchArchives = cols[1].Split(' ');
-                            cdnConfig.patchArchives = patchArchives;
-                        }
-                        break;
-                    case "patch-archive-group":
-                        cdnConfig.patchArchiveGroup = cols[1];
-                        break;
-                    case "builds":
-                        var builds = cols[1].Split(' ');
-                        cdnConfig.builds = builds;
-                        break;
-                    case "file-index":
-                        cdnConfig.fileIndex = cols[1];
-                        break;
-                    case "file-index-size":
-                        cdnConfig.fileIndexSize = cols[1];
-                        break;
-                    case "patch-file-index":
-                        cdnConfig.patchFileIndex = cols[1];
-                        break;
-                    case "patch-file-index-size":
-                        cdnConfig.patchFileIndexSize = cols[1];
-                        break;
-                    default:
-                        //Console.WriteLine("!!!!!!!! Unknown cdnconfig variable '" + cols[0] + "'");
-                        break;
-                }
-            }
-
-            return cdnConfig;
+            return GetConfigParser().GetCdnConfigAsync(url, hash).GetAwaiter().GetResult();
         }
 
         private static VersionsFile GetVersions(string program)
         {
-            string content;
-            var versions = new VersionsFile();
-
-            var versionsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "versions");
-            Console.WriteLine($"[HTTP GET] {versionsUrl.AbsoluteUri}");
-            using (HttpResponseMessage response = cdn.client.GetAsync(versionsUrl).Result)
-            {
-                if (response.IsSuccessStatusCode)
-                {
-                    using (HttpContent res = response.Content)
-                    {
-                        content = res.ReadAsStringAsync().Result;
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Error during retrieving HTTP versions: Received bad HTTP code " + response.StatusCode);
-                    return versions;
-                }
-            }
-
-            content = content.Replace("\0", "");
-            var lines = content.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-            var lineList = new List<string>();
-
-            for (var i = 0; i < lines.Count(); i++)
-            {
-                if (lines[i][0] != '#')
-                {
-                    lineList.Add(lines[i]);
-                }
-            }
-
-            lines = lineList.ToArray();
-
-            if (lines.Count() > 0)
-            {
-                versions.entries = new VersionsEntry[lines.Count() - 1];
-
-                var cols = lines[0].Split('|');
-
-                for (var c = 0; c < cols.Count(); c++)
-                {
-                    var friendlyName = cols[c].Split('!').ElementAt(0);
-
-                    for (var i = 1; i < lines.Count(); i++)
-                    {
-                        var row = lines[i].Split('|');
-
-                        switch (friendlyName)
-                        {
-                            case "Region":
-                                versions.entries[i - 1].region = row[c];
-                                break;
-                            case "BuildConfig":
-                                versions.entries[i - 1].buildConfig = row[c];
-                                break;
-                            case "CDNConfig":
-                                versions.entries[i - 1].cdnConfig = row[c];
-                                break;
-                            case "Keyring":
-                            case "KeyRing":
-                                versions.entries[i - 1].keyRing = row[c];
-                                break;
-                            case "BuildId":
-                                versions.entries[i - 1].buildId = row[c];
-                                break;
-                            case "VersionName":
-                            case "VersionsName":
-                                versions.entries[i - 1].versionsName = row[c].Trim('\r');
-                                break;
-                            case "ProductConfig":
-                                versions.entries[i - 1].productConfig = row[c];
-                                break;
-                            default:
-                                Console.WriteLine("!!!!!!!! Unknown versions variable '" + friendlyName + "'");
-                                break;
-                        }
-                    }
-                }
-            }
-
-            return versions;
+            return GetConfigParser().GetVersionsAsync(program).GetAwaiter().GetResult();
         }
 
         private static CdnsFile GetCDNs(string program)
         {
-            string content;
-
-            var cdns = new CdnsFile();
-
-            if (program == "gryphon")
-            {
-                cdns.entries = new CdnsEntry[1];
-                cdns.entries[0].hosts = new string[2] { "cdn.blizzard.com", "blzddist1-a.akamaihd.net" };
-                cdns.entries[0].path = "tpr/gryphon";
-                cdns.entries[0].configPath = "configs/data/";
-                return cdns;
-            }
-
-            var cdnsUrl = new Uri(baseUrl + "v2/products/" + program + "/" + "cdns");
-            Console.WriteLine($"[HTTP GET] {cdnsUrl.AbsoluteUri}");
-            using (HttpResponseMessage response = cdn.client.GetAsync(cdnsUrl).Result)
-            {
-                if (response.IsSuccessStatusCode)
-                {
-                    using (HttpContent res = response.Content)
-                    {
-                        content = res.ReadAsStringAsync().Result;
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Error during retrieving HTTP cdns: Received bad HTTP code " + response.StatusCode);
-                    return cdns;
-                }
-            }
-
-            var lines = content.Split(new string[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
-
-            var lineList = new List<string>();
-
-            for (var i = 0; i < lines.Count(); i++)
-            {
-                if (lines[i][0] != '#')
-                {
-                    lineList.Add(lines[i]);
-                }
-            }
-
-            lines = lineList.ToArray();
-
-            if (lines.Count() > 0)
-            {
-                cdns.entries = new CdnsEntry[lines.Count() - 1];
-
-                var cols = lines[0].Split('|');
-
-                for (var c = 0; c < cols.Count(); c++)
-                {
-                    var friendlyName = cols[c].Split('!').ElementAt(0);
-
-                    for (var i = 1; i < lines.Count(); i++)
-                    {
-                        var row = lines[i].Split('|');
-
-                        switch (friendlyName)
-                        {
-                            case "Name":
-                                cdns.entries[i - 1].name = row[c];
-                                break;
-                            case "Path":
-                                cdns.entries[i - 1].path = row[c];
-                                break;
-                            case "Hosts":
-                                var hosts = row[c].Split(' ');
-                                cdns.entries[i - 1].hosts = new string[hosts.Count()];
-                                for (var h = 0; h < hosts.Count(); h++)
-                                {
-                                    cdns.entries[i - 1].hosts[h] = hosts[h];
-                                }
-                                break;
-                            case "ConfigPath":
-                                cdns.entries[i - 1].configPath = row[c];
-                                break;
-                            default:
-                                //Console.WriteLine("!!!!!!!! Unknown cdns variable '" + friendlyName + "'");
-                                break;
-                        }
-                    }
-                }
-
-                foreach (var subcdn in cdns.entries)
-                {
-                    foreach (var cdnHost in subcdn.hosts)
-                    {
-                        if (!cdn.cdnList.Contains(cdnHost))
-                        {
-                            Console.WriteLine($"[CDN LIST] Adding new CDN from response: {cdnHost}");
-                            cdn.cdnList.Add(cdnHost);
-                        }
-                    }
-                }
-
-                Console.WriteLine($"[CDN LIST] Final CDN list ({cdn.cdnList.Count} servers):");
-                foreach (var cdnServer in cdn.cdnList)
-                {
-                    Console.WriteLine($"  - {cdnServer}");
-                }
-            }
-
-            return cdns;
+            return GetConfigParser().GetCdnsAsync(program, cdn.cdnList).GetAwaiter().GetResult();
         }
 
         private static GameBlobFile GetProductConfig(string url, string hash)
         {
-            string content;
-
-            var gblob = new GameBlobFile();
-
-            try
-            {
-                content = Encoding.UTF8.GetString(cdn.Get(CombinePath(url, hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash)).Result);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error retrieving product config: " + e.Message);
-                return gblob;
-            }
-
-            if (string.IsNullOrEmpty(content))
-            {
-                Console.WriteLine("Error reading product config!");
-                return gblob;
-            }
-
-            dynamic json = Newtonsoft.Json.JsonConvert.DeserializeObject(content);
-            if (json.all.config.decryption_key_name != null)
-            {
-                gblob.decryptionKeyName = json.all.config.decryption_key_name.Value;
-            }
-            return gblob;
+            return GetConfigParser().GetProductConfigAsync(url, hash).GetAwaiter().GetResult();
         }
 
         private static BuildConfigFile GetBuildConfig(string url, string hash)
         {
-            string content;
+            // Check for debug override file
+            if (File.Exists("fakebuildconfig"))
+            {
+                Console.WriteLine("!!!!!!!!! LOADING FAKE BUILDCONFIG");
+                var content = File.ReadAllText("fakebuildconfig").Replace("\r", "");
+                return ParseBuildConfigContent(content);
+            }
+            return GetConfigParser().GetBuildConfigAsync(url, hash).GetAwaiter().GetResult();
+        }
 
+        // Helper for debug build config parsing (preserves fakebuildconfig feature)
+        private static BuildConfigFile ParseBuildConfigContent(string content)
+        {
             var buildConfig = new BuildConfigFile();
-
-            try
-            {
-                if (!File.Exists("fakebuildconfig"))
-                {
-                    content = Encoding.UTF8.GetString(cdn.Get(CombinePath(url, hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash)).Result);
-                }
-                else
-                {
-                    Console.WriteLine("!!!!!!!!! LOADING FAKE BUILDCONFIG");
-                    content = File.ReadAllText("fakebuildconfig").Replace("\r", "");
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error retrieving build config: " + e.Message);
-                return buildConfig;
-            }
 
             if (string.IsNullOrEmpty(content) || !content.StartsWith("# Build"))
             {
@@ -2777,108 +2530,48 @@ namespace BuildBackup
                 return buildConfig;
             }
 
-            var lines = content.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = content.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-            for (var i = 0; i < lines.Count(); i++)
+            foreach (var line in lines)
             {
-                if (lines[i].StartsWith("#") || lines[i].Length == 0) { continue; }
-                var cols = lines[i].Split(new string[] { " = " }, StringSplitOptions.RemoveEmptyEntries);
+                if (line.StartsWith("#") || line.Length == 0) continue;
+                var cols = line.Split(new[] { " = " }, StringSplitOptions.RemoveEmptyEntries);
+                if (cols.Length < 2) continue;
+
                 switch (cols[0])
                 {
-                    case "root":
-                        buildConfig.root = cols[1];
-                        break;
-                    case "download":
-                        buildConfig.download = cols[1].Split(' ');
-                        break;
-                    case "install":
-                        buildConfig.install = cols[1].Split(' ');
-                        break;
-                    case "encoding":
-                        buildConfig.encoding = cols[1].Split(' ');
-                        break;
-                    case "encoding-size":
-                        var encodingSize = cols[1].Split(' ');
-                        buildConfig.encodingSize = encodingSize;
-                        break;
-                    case "size":
-                        buildConfig.size = cols[1].Split(' ');
-                        break;
-                    case "size-size":
-                        buildConfig.sizeSize = cols[1].Split(' ');
-                        break;
-                    case "build-name":
-                        buildConfig.buildName = cols[1];
-                        break;
-                    case "build-playbuild-installer":
-                        buildConfig.buildPlaybuildInstaller = cols[1];
-                        break;
-                    case "build-product":
-                        buildConfig.buildProduct = cols[1];
-                        break;
-                    case "build-uid":
-                        buildConfig.buildUid = cols[1];
-                        break;
-                    case "patch":
-                        buildConfig.patch = cols[1];
-                        break;
-                    case "patch-size":
-                        buildConfig.patchSize = cols[1];
-                        break;
-                    case "patch-config":
-                        buildConfig.patchConfig = cols[1];
-                        break;
-                    case "build-branch": // Overwatch
-                        buildConfig.buildBranch = cols[1];
-                        break;
-                    case "build-num": // Agent
-                    case "build-number": // Overwatch
-                    case "build-version": // Catalog
-                        buildConfig.buildNumber = cols[1];
-                        break;
-                    case "build-attributes": // Agent
-                        buildConfig.buildAttributes = cols[1];
-                        break;
-                    case "build-comments": // D3
-                        buildConfig.buildComments = cols[1];
-                        break;
-                    case "build-creator": // D3
-                        buildConfig.buildCreator = cols[1];
-                        break;
-                    case "build-fixed-hash": // S2
-                        buildConfig.buildFixedHash = cols[1];
-                        break;
-                    case "build-replay-hash": // S2
-                        buildConfig.buildReplayHash = cols[1];
-                        break;
-                    case "build-t1-manifest-version":
-                        buildConfig.buildManifestVersion = cols[1];
-                        break;
-                    case "install-size":
-                        buildConfig.installSize = cols[1].Split(' ');
-                        break;
-                    case "download-size":
-                        buildConfig.downloadSize = cols[1].Split(' ');
-                        break;
+                    case "root": buildConfig.root = cols[1]; break;
+                    case "download": buildConfig.download = cols[1].Split(' '); break;
+                    case "install": buildConfig.install = cols[1].Split(' '); break;
+                    case "encoding": buildConfig.encoding = cols[1].Split(' '); break;
+                    case "encoding-size": buildConfig.encodingSize = cols[1].Split(' '); break;
+                    case "size": buildConfig.size = cols[1].Split(' '); break;
+                    case "size-size": buildConfig.sizeSize = cols[1].Split(' '); break;
+                    case "build-name": buildConfig.buildName = cols[1]; break;
+                    case "build-playbuild-installer": buildConfig.buildPlaybuildInstaller = cols[1]; break;
+                    case "build-product": buildConfig.buildProduct = cols[1]; break;
+                    case "build-uid": buildConfig.buildUid = cols[1]; break;
+                    case "patch": buildConfig.patch = cols[1]; break;
+                    case "patch-size": buildConfig.patchSize = cols[1]; break;
+                    case "patch-config": buildConfig.patchConfig = cols[1]; break;
+                    case "build-branch": buildConfig.buildBranch = cols[1]; break;
+                    case "build-num":
+                    case "build-number":
+                    case "build-version": buildConfig.buildNumber = cols[1]; break;
+                    case "build-attributes": buildConfig.buildAttributes = cols[1]; break;
+                    case "build-comments": buildConfig.buildComments = cols[1]; break;
+                    case "build-creator": buildConfig.buildCreator = cols[1]; break;
+                    case "build-fixed-hash": buildConfig.buildFixedHash = cols[1]; break;
+                    case "build-replay-hash": buildConfig.buildReplayHash = cols[1]; break;
+                    case "build-t1-manifest-version": buildConfig.buildManifestVersion = cols[1]; break;
+                    case "install-size": buildConfig.installSize = cols[1].Split(' '); break;
+                    case "download-size": buildConfig.downloadSize = cols[1].Split(' '); break;
                     case "build-partial-priority":
-                    case "partial-priority":
-                        buildConfig.partialPriority = cols[1];
-                        break;
-                    case "partial-priority-size":
-                        buildConfig.partialPrioritySize = cols[1];
-                        break;
-                    case "build-signature-file":
-                        buildConfig.buildSignatureFile = cols[1];
-                        break;
-                    case "patch-index":
-                        buildConfig.patchIndex = cols[1].Split(' ');
-                        break;
-                    case "patch-index-size":
-                        buildConfig.patchIndexSize = cols[1].Split(' ');
-                        break;
-                    default:
-                        //Console.WriteLine("!!!!!!!! Unknown buildconfig variable '" + cols[0] + "'");
-                        break;
+                    case "partial-priority": buildConfig.partialPriority = cols[1]; break;
+                    case "partial-priority-size": buildConfig.partialPrioritySize = cols[1]; break;
+                    case "build-signature-file": buildConfig.buildSignatureFile = cols[1]; break;
+                    case "patch-index": buildConfig.patchIndex = cols[1].Split(' '); break;
+                    case "patch-index-size": buildConfig.patchIndexSize = cols[1].Split(' '); break;
                 }
             }
 
@@ -3101,485 +2794,35 @@ namespace BuildBackup
 
         private static RootFile GetRoot(string url, string hash, bool parseIt = false)
         {
-            var root = new RootFile
-            {
-                entriesLookup = new MultiDictionary<ulong, RootEntry>(),
-                entriesFDID = new MultiDictionary<uint, RootEntry>()
-            };
-
-            byte[] content = cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash).Result;
-            if (!parseIt) return root;
-
-            var namedCount = 0;
-            var unnamedCount = 0;
-            uint totalFiles = 0;
-            uint namedFiles = 0;
-            var newRoot = false;
-
-            uint dfHeaderSize = 0;
-            uint dfVersion = 0;
-
-            using (BinaryReader bin = new BinaryReader(new MemoryStream(BLTE.Parse(content))))
-            {
-                var header = bin.ReadUInt32();
-
-                if (header == 1296454484)
-                {
-                    totalFiles = bin.ReadUInt32();
-                    namedFiles = bin.ReadUInt32();
-
-                    if (namedFiles == 1 || namedFiles == 2)
-                    {
-                        // Post 10.1.7
-                        dfHeaderSize = totalFiles;
-                        dfVersion = namedFiles;
-
-                        if (dfVersion == 1 || dfVersion == 2)
-                        {
-                            totalFiles = bin.ReadUInt32();
-                            namedFiles = bin.ReadUInt32();
-                        }
-
-                        bin.BaseStream.Position = dfHeaderSize;
-                    }
-
-                    newRoot = true;
-                }
-                else
-                {
-                    bin.BaseStream.Position = 0;
-                }
-
-                var blockCount = 0;
-
-                while (bin.BaseStream.Position < bin.BaseStream.Length)
-                {
-                    uint count = 0;
-                    ContentFlags contentFlags = 0;
-                    LocaleFlags localeFlags = 0;
-
-                    if (dfVersion == 2)
-                    {
-                        count = bin.ReadUInt32();
-                        localeFlags = (LocaleFlags)bin.ReadUInt32();
-                        var unkFlags = bin.ReadUInt32();
-                        contentFlags = (ContentFlags)bin.ReadUInt32();
-                        var unkByte = bin.ReadByte();
-                    }
-                    else
-                    {
-                        count = bin.ReadUInt32();
-                        contentFlags = (ContentFlags)bin.ReadUInt32();
-                        localeFlags = (LocaleFlags)bin.ReadUInt32();
-                    }
-
-                    //Console.WriteLine("[Block " + blockCount + "] " + count + " entries. Content flags: " + contentFlags.ToString() + ", Locale flags: " + localeFlags.ToString());
-                    var entries = new RootEntry[count];
-                    var filedataIds = new int[count];
-
-                    var fileDataIndex = 0;
-                    for (var i = 0; i < count; ++i)
-                    {
-                        entries[i].localeFlags = localeFlags;
-                        entries[i].contentFlags = contentFlags;
-
-                        filedataIds[i] = fileDataIndex + bin.ReadInt32();
-                        entries[i].fileDataID = (uint)filedataIds[i];
-                        fileDataIndex = filedataIds[i] + 1;
-                    }
-
-                    var blockFdids = new List<string>();
-                    if (!newRoot)
-                    {
-                        for (var i = 0; i < count; ++i)
-                        {
-                            entries[i].md5 = bin.ReadBytes(16);
-                            entries[i].lookup = bin.ReadUInt64();
-                            root.entriesLookup.Add(entries[i].lookup, entries[i]);
-                            root.entriesFDID.Add(entries[i].fileDataID, entries[i]);
-                            blockFdids.Add(entries[i].fileDataID.ToString());
-                        }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < count; ++i)
-                        {
-                            entries[i].md5 = bin.ReadBytes(16);
-                        }
-
-                        for (var i = 0; i < count; ++i)
-                        {
-                            if (contentFlags.HasFlag(ContentFlags.NoNames))
-                            {
-                                entries[i].lookup = 0;
-                                unnamedCount++;
-                            }
-                            else
-                            {
-                                entries[i].lookup = bin.ReadUInt64();
-                                root.entriesLookup.Add(entries[i].lookup, entries[i]);
-                                namedCount++;
-                            }
-
-                            root.entriesFDID.Add(entries[i].fileDataID, entries[i]);
-                            blockFdids.Add(entries[i].fileDataID.ToString());
-                        }
-                    }
-
-                    //File.WriteAllLinesAsync("blocks/Block" + blockCount + ".txt", blockFdids);
-                    blockCount++;
-                }
-            }
-
-            if ((namedFiles > 0) && namedFiles != namedCount)
-                throw new Exception("Didn't read correct amount of named files! Read " + namedCount + " but expected " + namedFiles);
-
-            if ((totalFiles > 0) && totalFiles != (namedCount + unnamedCount))
-                throw new Exception("Didn't read correct amount of total files! Read " + (namedCount + unnamedCount) + " but expected " + totalFiles);
-
-            return root;
+            return GetCascParser().GetRootAsync(url, hash, parseIt).GetAwaiter().GetResult();
         }
 
         private static DownloadFile GetDownload(string url, string hash, bool parseIt = false)
         {
-            var download = new DownloadFile();
-
-            byte[] content = cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash).Result;
-
-            if (!parseIt) return download;
-
-            using (BinaryReader bin = new BinaryReader(new MemoryStream(BLTE.Parse(content))))
-            {
-                if (Encoding.UTF8.GetString(bin.ReadBytes(2)) != "DL") { throw new Exception("Error while parsing download file. Did BLTE header size change?"); }
-                download.version = bin.ReadByte();
-                download.hashSizeEKey = bin.ReadByte();
-                download.hasChecksumInEntry = bin.ReadBoolean();
-                download.numEntries = bin.ReadUInt32(true);
-                download.numTags = bin.ReadUInt16(true);
-                download.flagSize = bin.ReadByte();
-
-                download.entries = new DownloadEntry[download.numEntries];
-                for (int i = 0; i < download.numEntries; i++)
-                {
-                    download.entries[i].eKey = Convert.ToHexString(bin.ReadBytes(download.hashSizeEKey));
-                    download.entries[i].size = bin.ReadUInt40(true);
-                    download.entries[i].priority = bin.ReadByte();
-
-                    if (download.hasChecksumInEntry)
-                    {
-                        download.entries[i].checksum = bin.ReadUInt32(true);
-                    }
-
-                    if (download.flagSize == 1)
-                    {
-                        download.entries[i].flags = bin.ReadByte();
-                    }
-                    else
-                    {
-                        throw new Exception("Unexpected download flag size");
-                    }
-                }
-            }
-
-            return download;
+            return GetCascParser().GetDownloadAsync(url, hash, parseIt).GetAwaiter().GetResult();
         }
 
         private static InstallFile GetInstall(string url, string hash, bool parseIt = false)
         {
-            var install = new InstallFile();
-
-            byte[] content = cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash).Result;
-
-            if (!parseIt) return install;
-
-            using (BinaryReader bin = new BinaryReader(new MemoryStream(BLTE.Parse(content))))
-            {
-                if (Encoding.UTF8.GetString(bin.ReadBytes(2)) != "IN") { throw new Exception("Error while parsing install file. Did BLTE header size change?"); }
-
-                bin.ReadByte();
-
-                install.hashSize = bin.ReadByte();
-                if (install.hashSize != 16) throw new Exception("Unsupported install hash size!");
-
-                install.numTags = bin.ReadUInt16(true);
-                install.numEntries = bin.ReadUInt32(true);
-
-                int bytesPerTag = ((int)install.numEntries + 7) / 8;
-
-                install.tags = new InstallTagEntry[install.numTags];
-
-                for (var i = 0; i < install.numTags; i++)
-                {
-                    install.tags[i].name = bin.ReadCString();
-                    install.tags[i].type = bin.ReadUInt16(true);
-
-                    var filebits = bin.ReadBytes(bytesPerTag);
-
-                    for (int j = 0; j < bytesPerTag; j++)
-                        filebits[j] = (byte)((filebits[j] * 0x0202020202 & 0x010884422010) % 1023);
-
-                    install.tags[i].files = new BitArray(filebits);
-                }
-
-                install.entries = new InstallFileEntry[install.numEntries];
-
-                for (var i = 0; i < install.numEntries; i++)
-                {
-                    install.entries[i].name = bin.ReadCString();
-                    install.entries[i].contentHash = bin.ReadBytes(install.hashSize);
-                    install.entries[i].size = bin.ReadUInt32(true);
-                    install.entries[i].tags = new List<string>();
-                    for (var j = 0; j < install.numTags; j++)
-                    {
-                        if (install.tags[j].files[i] == true)
-                        {
-                            install.entries[i].tags.Add(install.tags[j].type + "=" + install.tags[j].name);
-                        }
-                    }
-                }
-            }
-
-            return install;
+            return GetCascParser().GetInstallAsync(url, hash, parseIt).GetAwaiter().GetResult();
         }
 
         private static async Task<EncodingFile> GetEncoding(string url, string hash, int encodingSize = 0, bool parseTableB = false, bool checkStuff = false, bool encoded = true)
         {
-            var encoding = new EncodingFile();
-
-            // Get the raw data first
-            byte[] data;
-            if (encoded)
+            var options = new Interfaces.EncodingParseOptions
             {
-                var content = await cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash);
-
-                if (encodingSize != 0 && encodingSize != content.Length)
-                {
-                    content = await cdn.Get(url + "/data/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash, true);
-
-                    if (encodingSize != content.Length && encodingSize != 0)
-                    {
-                        throw new Exception("File corrupt/not fully downloaded! Remove " + "data / " + hash.Substring(0, 2) + " / " + hash.Substring(2, 2) + " / " + hash + " from cache.");
-                    }
-                }
-
-                data = BLTE.Parse(content);
-            }
-            else
-            {
-                data = File.ReadAllBytes(url);
-            }
-
-            // Parse the encoding file with proper resource disposal
-            using var bin = new BinaryReader(new MemoryStream(data));
-
-            if (Encoding.UTF8.GetString(bin.ReadBytes(2)) != "EN") { throw new Exception("Error while parsing encoding file. Did BLTE header size change?"); }
-            encoding.unk1 = bin.ReadByte();
-            encoding.checksumSizeA = bin.ReadByte();
-            encoding.checksumSizeB = bin.ReadByte();
-            encoding.sizeA = bin.ReadUInt16(true);
-            encoding.sizeB = bin.ReadUInt16(true);
-            encoding.numEntriesA = bin.ReadUInt32(true);
-            encoding.numEntriesB = bin.ReadUInt32(true);
-            bin.ReadByte(); // unk
-            encoding.stringBlockSize = bin.ReadUInt32(true);
-
-            var headerLength = bin.BaseStream.Position;
-            var stringBlockEntries = new List<string>();
-
-            if (parseTableB)
-            {
-                while ((bin.BaseStream.Position - headerLength) != (long)encoding.stringBlockSize)
-                {
-                    stringBlockEntries.Add(bin.ReadCString());
-                }
-
-                encoding.stringBlockEntries = stringBlockEntries.ToArray();
-            }
-            else
-            {
-                bin.BaseStream.Position += (long)encoding.stringBlockSize;
-            }
-
-            /* Table A */
-            if (checkStuff)
-            {
-                encoding.aHeaders = new EncodingHeaderEntry[encoding.numEntriesA];
-
-                for (int i = 0; i < encoding.numEntriesA; i++)
-                {
-                    encoding.aHeaders[i].firstHash = Convert.ToHexString(bin.ReadBytes(16));
-                    encoding.aHeaders[i].checksum = Convert.ToHexString(bin.ReadBytes(16));
-                }
-            }
-            else
-            {
-                bin.BaseStream.Position += encoding.numEntriesA * 32;
-            }
-
-            var tableAstart = bin.BaseStream.Position;
-
-            List<EncodingFileEntry> entries = new List<EncodingFileEntry>();
-
-            for (int i = 0; i < encoding.numEntriesA; i++)
-            {
-                ushort keysCount;
-                while ((keysCount = bin.ReadUInt16()) != 0)
-                {
-                    EncodingFileEntry entry = new EncodingFileEntry()
-                    {
-                        keyCount = keysCount,
-                        size = bin.ReadUInt32(true),
-                        cKey = Convert.ToHexString(bin.ReadBytes(16)),
-                        eKeys = new List<string>()
-                    };
-
-                    for (int key = 0; key < entry.keyCount; key++)
-                    {
-                        entry.eKeys.Add(Convert.ToHexString(bin.ReadBytes(16)));
-                    }
-
-                    entries.Add(entry);
-                }
-
-                var remaining = 4096 - ((bin.BaseStream.Position - tableAstart) % 4096);
-                if (remaining > 0) { bin.BaseStream.Position += remaining; }
-            }
-
-            encoding.aEntries = entries.ToArray();
-
-            if (!parseTableB)
-            {
-                return encoding;
-            }
-
-            /* Table B */
-            if (checkStuff)
-            {
-                encoding.bHeaders = new EncodingHeaderEntry[encoding.numEntriesB];
-
-                for (int i = 0; i < encoding.numEntriesB; i++)
-                {
-                    encoding.bHeaders[i].firstHash = Convert.ToHexString(bin.ReadBytes(16));
-                    encoding.bHeaders[i].checksum = Convert.ToHexString(bin.ReadBytes(16));
-                }
-            }
-            else
-            {
-                bin.BaseStream.Position += encoding.numEntriesB * 32;
-            }
-
-            var tableBstart = bin.BaseStream.Position;
-
-            encoding.bEntries = new Dictionary<string, EncodingFileDescEntry>();
-
-            while (bin.BaseStream.Position < tableBstart + 4096 * encoding.numEntriesB)
-            {
-                var remaining = 4096 - (bin.BaseStream.Position - tableBstart) % 4096;
-
-                if (remaining < 25)
-                {
-                    bin.BaseStream.Position += remaining;
-                    continue;
-                }
-
-                var key = Convert.ToHexString(bin.ReadBytes(16));
-
-                EncodingFileDescEntry entry = new EncodingFileDescEntry()
-                {
-                    stringIndex = bin.ReadUInt32(true),
-                    compressedSize = bin.ReadUInt40(true)
-                };
-
-                if (entry.stringIndex == uint.MaxValue) break;
-
-                encoding.bEntries.Add(key, entry);
-            }
-
-            // Go to the end until we hit a non-NUL byte
-            while (bin.BaseStream.Position < bin.BaseStream.Length)
-            {
-                if (bin.ReadByte() != 0)
-                    break;
-            }
-
-            bin.BaseStream.Position -= 1;
-            var eespecSize = bin.BaseStream.Length - bin.BaseStream.Position;
-            encoding.encodingESpec = new string(bin.ReadChars(int.Parse(eespecSize.ToString())));
-
-            return encoding;
+                ExpectedSize = encodingSize,
+                ParseTableB = parseTableB,
+                CheckHeaders = checkStuff,
+                IsEncoded = encoded,
+                LocalPath = encoded ? null : url
+            };
+            return await GetCascParser().GetEncodingAsync(url, hash, options);
         }
 
         private static PatchFile GetPatch(string url, string hash, bool parseIt = false)
         {
-            var patchFile = new PatchFile();
-
-            byte[] content = cdn.Get(url + "/patch/" + hash.Substring(0, 2) + "/" + hash.Substring(2, 2) + "/" + hash).Result;
-
-            if (!parseIt) return patchFile;
-
-            using (BinaryReader bin = new BinaryReader(new MemoryStream(content)))
-            {
-                if (Encoding.UTF8.GetString(bin.ReadBytes(2)) != "PA") { throw new Exception("Error while parsing patch file!"); }
-
-                patchFile.version = bin.ReadByte();
-                patchFile.fileKeySize = bin.ReadByte();
-                patchFile.sizeB = bin.ReadByte();
-                patchFile.patchKeySize = bin.ReadByte();
-                patchFile.blockSizeBits = bin.ReadByte();
-                patchFile.blockCount = bin.ReadUInt16(true);
-                patchFile.flags = bin.ReadByte();
-                patchFile.encodingContentKey = bin.ReadBytes(16);
-                patchFile.encodingEncodingKey = bin.ReadBytes(16);
-                patchFile.decodedSize = bin.ReadUInt32(true);
-                patchFile.encodedSize = bin.ReadUInt32(true);
-                patchFile.especLength = bin.ReadByte();
-                patchFile.encodingSpec = new string(bin.ReadChars(patchFile.especLength));
-
-                patchFile.blocks = new PatchBlock[patchFile.blockCount];
-                for (var i = 0; i < patchFile.blockCount; i++)
-                {
-                    patchFile.blocks[i].lastFileContentKey = bin.ReadBytes(patchFile.fileKeySize);
-                    patchFile.blocks[i].blockMD5 = bin.ReadBytes(16);
-                    patchFile.blocks[i].blockOffset = bin.ReadUInt32(true);
-
-                    var prevPos = bin.BaseStream.Position;
-
-                    var files = new List<BlockFile>();
-
-                    bin.BaseStream.Position = patchFile.blocks[i].blockOffset;
-                    while (bin.BaseStream.Position <= patchFile.blocks[i].blockOffset + 0x10000)
-                    {
-                        var file = new BlockFile();
-
-                        file.numPatches = bin.ReadByte();
-                        if (file.numPatches == 0) break;
-                        file.targetFileContentKey = bin.ReadBytes(patchFile.fileKeySize);
-                        file.decodedSize = bin.ReadUInt40(true);
-
-                        var filePatches = new List<FilePatch>();
-
-                        for (var j = 0; j < file.numPatches; j++)
-                        {
-                            var filePatch = new FilePatch();
-                            filePatch.sourceFileEncodingKey = bin.ReadBytes(patchFile.fileKeySize);
-                            filePatch.decodedSize = bin.ReadUInt40(true);
-                            filePatch.patchEncodingKey = bin.ReadBytes(patchFile.patchKeySize);
-                            filePatch.patchSize = bin.ReadUInt32(true);
-                            filePatch.patchIndex = bin.ReadByte();
-                            filePatches.Add(filePatch);
-                        }
-
-                        file.patches = filePatches.ToArray();
-
-                        files.Add(file);
-                    }
-
-                    patchFile.blocks[i].files = files.ToArray();
-                    bin.BaseStream.Position = prevPos;
-                }
-            }
-
-            return patchFile;
+            return GetCascParser().GetPatchAsync(url, hash, parseIt).GetAwaiter().GetResult();
         }
         private static async Task UpdateListfileAsync()
         {
