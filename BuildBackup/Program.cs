@@ -1729,7 +1729,7 @@ namespace BuildBackup
                 try
                 {
                     if (!string.IsNullOrEmpty(buildConfig.patch))
-                        patch = GetPatch(cdns.entries[0].path + "/", buildConfig.patch, true);
+                        patch = GetPatch(cdns.entries[0].path, buildConfig.patch, true);
 
                     if (!string.IsNullOrEmpty(buildConfig.patchConfig))
                         await cdn.Get(cdns.entries[0].path + "/config/" + buildConfig.patchConfig[0] + buildConfig.patchConfig[1] + "/" + buildConfig.patchConfig[2] + buildConfig.patchConfig[3] + "/" + buildConfig.patchConfig);
@@ -1754,7 +1754,7 @@ namespace BuildBackup
                         Console.Write("Loading " + cdnConfig.archives.Count() + " indexes...\n");
                         try
                         {
-                            GetIndexes(cdns.entries[0].path + "/", cdnConfig.archives);
+                            GetIndexes(cdns.entries[0].path, cdnConfig.archives);
                         }
                         catch (Exception e)
                         {
@@ -2317,7 +2317,7 @@ namespace BuildBackup
                         Console.Write("..done\n");
 
                         Console.Write("Downloading " + cdnConfig.patchArchives.Count() + " patch archive indexes..");
-                        GetPatchIndexes(cdns.entries[0].path + "/", cdnConfig.patchArchives);
+                        GetPatchIndexes(cdns.entries[0].path, cdnConfig.patchArchives);
                         Console.Write("..done\n");
                     }
 

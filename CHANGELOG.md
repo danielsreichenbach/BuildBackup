@@ -5,6 +5,13 @@ All notable changes to BuildBackup are documented in this file.
 This project does not use semantic versioning tags. Changes are organized chronologically
 by development period.
 
+## 2026-03-02
+
+### Fixed
+
+- Removed spurious trailing slash from CDN path in three call sites (`GetPatch`, `GetIndexes`,
+  `GetPatchIndexes`), which produced double slashes in URLs (e.g. `tpr/wow//data/...`)
+
 ## 2026-01-30
 
 ### Added
